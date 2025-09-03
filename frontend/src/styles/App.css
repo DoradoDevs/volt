@@ -1,0 +1,25 @@
+body {
+  background: linear-gradient(to bottom, #4B0082, #000000);
+  color: white;
+  font-family: Arial, sans-serif;
+}
+
+button {
+  background: #9370DB;
+  border: none;
+  color: white;
+  padding: 10px 20px;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+button:hover {
+  background: #7B68EE;
+}
+
+/* Clean, sleek styles for panels, inputs, etc. */
+.dashboard {
+  max-width: 800px;
+  margin: auto;
+  padding: 20px;
+}
