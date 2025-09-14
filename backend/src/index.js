@@ -5,8 +5,8 @@ const jwt = require('jsonwebtoken');
 const routes = require('./routes');
 const cors = require('cors');
 
-// Load .env file and log for debugging
-const result = dotenv.config();
+// Load .env file from the root directory with explicit path
+const result = dotenv.config({ path: __dirname + '/../.env' });
 if (result.error) {
   console.error('Error loading .env file:', result.error);
 }
@@ -18,7 +18,7 @@ console.log('Environment variables:', {
 });
 
 const app = express();
-app.use(cors()); // Enable CORS for all routes
+app.use(cors()); // Enable CORS for all routes, allowing localhost:3000
 app.use(express.json());
 
 mongoose.connect(process.env.MONGO_URI)

@@ -34,6 +34,7 @@ const signup = async (req, res) => {
     return res.status(400).json({ error: 'Email and password required' });
   }
   try {
+    const effectiveReferrer = referrer && referrer.trim() ? referrer : null;
     const existing = await User.findOne({ email });
     if (existing) {
       log(`User exists: ${email}`);
@@ -42,7 +43,7 @@ const signup = async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
     const verificationCode = crypto.randomBytes(3).toString('hex');
     const referralCode = crypto.randomBytes(3).toString('hex');
-    const user = new User({ email, password: hashed, verificationCode, referralCode, referrer });
+    const user = new User({ email, password: hashed, verificationCode, referralCode, referrer: effectiveReferrer });
     await user.save();
     log(`User saved: ${JSON.stringify({ email, referralCode })}`);
     await sendVerificationEmail(email, verificationCode);

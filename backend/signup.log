@@ -1,0 +1,24 @@
+2025-09-14T20:44:41.976Z - Signup attempt: {"email":"alxdore@gmail.com","password":"JamieHuang24!","referrer":""}
+2025-09-14T20:44:42.079Z - Signup error: User validation failed: referrer: Cast to ObjectId failed for value "" (type string) at path "referrer" because of "BSONError"
+ValidationError: User validation failed: referrer: Cast to ObjectId failed for value "" (type string) at path "referrer" because of "BSONError"
+    at Document.invalidate (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\mongoose\lib\document.js:3219:32)
+    at model.$set (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\mongoose\lib\document.js:1464:12)
+    at model.$set (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\mongoose\lib\document.js:1119:16)
+    at model.Document (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\mongoose\lib\document.js:165:12)
+    at model.Model (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\mongoose\lib\model.js:123:12)
+    at new model (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\mongoose\lib\model.js:4758:15)
+    at signup (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\src\controllers\auth.js:45:18)
+2025-09-14T21:17:45.903Z - Signup attempt: {"email":"alxdore@gmail.com","password":"JamieHuang24!","referrer":""}
+2025-09-14T21:17:46.037Z - User saved: {"email":"alxdore@gmail.com","referralCode":"641dfd"}
+2025-09-14T21:17:46.178Z - Signup error: Missing credentials for "PLAIN"
+Error: Missing credentials for "PLAIN"
+    at SMTPConnection._formatError (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection.login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:454:38)
+    at C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-transport\index.js:272:32
+    at SMTPConnection.<anonymous> (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:215:17)
+    at Object.onceWrapper (node:events:632:28)
+    at SMTPConnection.emit (node:events:518:28)
+    at SMTPConnection._actionEHLO (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1371:14)
+    at SMTPConnection._processResponse (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
