@@ -1,5 +1,5 @@
 const User = require('../models/user');
-const { encrypt, getKeypair, getBalance, performSwap, sellAllTokens, closeTokenAccounts } = require('../services/solana');
+const { encrypt, decrypt, getKeypair, getBalance, performSwap, sellAllTokens, closeTokenAccounts } = require('../services/solana');
 const { startBot, stopBot } = require('../services/bot');
 const web3 = require('@solana/web3.js');
 
@@ -132,12 +132,12 @@ const closeAccounts = async (req, res) => {
   res.json({ message: 'Closed accounts' });
 };
 
-const startBot = async (req, res) => {
+const startBotController = async (req, res) => {
   await startBot(req.userId);
   res.json({ message: 'Bot started' });
 };
 
-const stopBot = async (req, res) => {
+const stopBotController = async (req, res) => {
   await stopBot(req.userId);
   res.json({ message: 'Bot stopped' });
 };
@@ -149,4 +149,4 @@ const updateSettings = async (req, res) => {
   res.json({ message: 'Updated' });
 };
 
-module.exports = { getDashboard, manageReferral, getTier, manageWallets, depositWithdraw, distribute, consolidate, sellAll, closeAccounts, startBot, stopBot, updateSettings };
+module.exports = { getDashboard, manageReferral, getTier, manageWallets, depositWithdraw, distribute, consolidate, sellAll, closeAccounts, startBotController, stopBotController, updateSettings };

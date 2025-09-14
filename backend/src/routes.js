@@ -1,6 +1,6 @@
 const express = require('express');
 const { signup, login, verify } = require('./controllers/auth');
-const { getDashboard, manageReferral, getTier, manageWallets, depositWithdraw, distribute, consolidate, sellAll, closeAccounts, startBot, stopBot, updateSettings } = require('./controllers/dashboard');
+const { getDashboard, manageReferral, getTier, manageWallets, depositWithdraw, distribute, consolidate, sellAll, closeAccounts, startBotController, stopBotController, updateSettings } = require('./controllers/dashboard');
 const authMiddleware = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
@@ -29,8 +29,8 @@ router.post('/funds/distribute', authMiddleware, distribute);
 router.post('/funds/consolidate', authMiddleware, consolidate);
 router.post('/funds/sell-all', authMiddleware, sellAll);
 router.post('/funds/close-accounts', authMiddleware, closeAccounts);
-router.post('/bot/start', authMiddleware, startBot);
-router.post('/bot/stop', authMiddleware, stopBot);
+router.post('/bot/start', authMiddleware, startBotController);
+router.post('/bot/stop', authMiddleware, stopBotController);
 router.post('/settings/update', authMiddleware, updateSettings);
 
 module.exports = router;

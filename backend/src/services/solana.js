@@ -2,10 +2,39 @@ const web3 = require('@solana/web3.js');
 const { Jupiter } = require('@jup-ag/api');
 const CryptoJS = require('crypto-js');
 const bs58 = require('bs58');
+const User = require('../models/user'); // Ensure User model is imported
 
-const FEE_WALLET = new web3.PublicKey(process.env.FEE_WALLET);
-const REWARDS_WALLET = new web3.PublicKey(process.env.REWARDS_WALLET_ADDRESS);
-const REWARDS_KEYPAIR = web3.Keypair.fromSecretKey(bs58.decode(process.env.REWARDS_PRIVATE_KEY));
+// Validate environment variables
+if (!process.env.FEE_WALLET) {
+  throw new Error('FEE_WALLET not set in .env');
+}
+if (!process.env.REWARDS_WALLET_ADDRESS) {
+  throw new Error('REWARDS_WALLET_ADDRESS not set in .env');
+}
+if (!process.env.REWARDS_PRIVATE_KEY) {
+  throw new Error('REWARDS_PRIVATE_KEY not set in .env');
+}
+
+console.log('FEE_WALLET:', process.env.FEE_WALLET);
+console.log('REWARDS_WALLET_ADDRESS:', process.env.REWARDS_WALLET_ADDRESS);
+
+let FEE_WALLET, REWARDS_WALLET, REWARDS_KEYPAIR;
+try {
+  FEE_WALLET = new web3.PublicKey(process.env.FEE_WALLET);
+} catch (e) {
+  throw new Error(`Invalid FEE_WALLET address: ${process.env.FEE_WALLET} - ${e.message}`);
+}
+try {
+  REWARDS_WALLET = new web3.PublicKey(process.env.REWARDS_WALLET_ADDRESS);
+} catch (e) {
+  throw new Error(`Invalid REWARDS_WALLET_ADDRESS: ${process.env.REWARDS_WALLET_ADDRESS} - ${e.message}`);
+}
+try {
+  REWARDS_KEYPAIR = web3.Keypair.fromSecretKey(bs58.decode(process.env.REWARDS_PRIVATE_KEY));
+} catch (e) {
+  throw new Error(`Invalid REWARDS_PRIVATE_KEY: ${e.message}`);
+}
+
 const ENCRYPTION_SECRET = process.env.ENCRYPTION_SECRET;
 
 const encrypt = (text) => CryptoJS.AES.encrypt(text, ENCRYPTION_SECRET).toString();
@@ -20,12 +49,12 @@ const getConnection = (rpc) => new web3.Connection(rpc || process.env.SOLANA_RPC
 
 const getTierFee = (tier) => {
   const fees = { unranked: 0.01, bronze: 0.009, silver: 0.008, gold: 0.007, diamond: 0.005 };
-  return fees[tier];
+  return fees[tier] || 0.01; // Default to unranked if tier is invalid
 };
 
 const getReferralShare = (tier) => {
   const shares = { unranked: 0.1, bronze: 0.125, silver: 0.15, gold: 0.2, diamond: 0.25 };
-  return shares[tier];
+  return shares[tier] || 0.1; // Default to unranked
 };
 
 const addFeeInstructions = async (txn, signer, feeAmount, user, connection) => {
@@ -61,14 +90,30 @@ const addFeeInstructions = async (txn, signer, feeAmount, user, connection) => {
 
 const performSwap = async (user, walletKeypair, inputMint, outputMint, amountSol, slippage = 0.5) => {
   const connection = getConnection(user.rpc);
-  const jupiter = await Jupiter.load({ connection });
-  const quote = await jupiter.quote({
-    inputMint: new web3.PublicKey(inputMint),
-    outputMint: new web3.PublicKey(outputMint),
-    amount: amountSol * web3.LAMPORTS_PER_SOL,
-    slippageBps: slippage * 100,
-  });
-  const { swapTransaction } = await jupiter.swap({ swapRequest: { quoteResponse: quote, userPublicKey: walletKeypair.publicKey } });
+  let jupiter;
+  try {
+    jupiter = await Jupiter.load({ connection });
+  } catch (e) {
+    throw new Error(`Failed to initialize Jupiter API: ${e.message}`);
+  }
+  let quote;
+  try {
+    quote = await jupiter.quote({
+      inputMint: new web3.PublicKey(inputMint),
+      outputMint: new web3.PublicKey(outputMint),
+      amount: amountSol * web3.LAMPORTS_PER_SOL,
+      slippageBps: slippage * 100,
+    });
+  } catch (e) {
+    throw new Error(`Failed to get Jupiter quote: ${e.message}`);
+  }
+  let swapTransaction;
+  try {
+    const swapResult = await jupiter.swap({ swapRequest: { quoteResponse: quote, userPublicKey: walletKeypair.publicKey } });
+    swapTransaction = swapResult.swapTransaction;
+  } catch (e) {
+    throw new Error(`Failed to create swap transaction: ${e.message}`);
+  }
   const txnWithFee = await addFeeInstructions(swapTransaction, walletKeypair, amountSol, user, connection);
   const txid = await connection.sendRawTransaction(txnWithFee);
   await connection.confirmTransaction(txid);
@@ -86,7 +131,6 @@ const updateTier = async (user) => {
   await user.save();
 };
 
-// Other helpers: getBalance, createATA if needed, closeAccount, etc.
 const getBalance = async (address, rpc) => {
   const connection = getConnection(rpc);
   return await connection.getBalance(new web3.PublicKey(address)) / web3.LAMPORTS_PER_SOL;
@@ -101,4 +145,4 @@ const closeTokenAccounts = async (user, walletKeypair) => {
   // Find all ATAs with 0 balance, close with TokenProgram.closeAccount
 };
 
-module.exports = { encrypt, decrypt, getKeypair, performSwap, getBalance, sellAllTokens, closeTokenAccounts /* etc */ };
+module.exports = { encrypt, decrypt, getKeypair, performSwap, getBalance, sellAllTokens, closeTokenAccounts };
