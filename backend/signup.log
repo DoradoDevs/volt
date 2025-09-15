@@ -22,3 +22,90 @@ Error: Missing credentials for "PLAIN"
     at SMTPConnection._processResponse (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
     at SMTPConnection._onData (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
     at SMTPConnection._onSocketData (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+2025-09-15T20:42:09.981Z - Signup attempt: {"email":"alxdore@gmail.com","password":"JamieHuang24!","referrer":""}
+2025-09-15T20:42:10.006Z - User exists: alxdore@gmail.com
+2025-09-15T20:50:07.302Z - Login error: Illegal arguments: string, undefined
+Error: Illegal arguments: string, undefined
+    at _async (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:286:46)
+    at C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:307:17
+    at new Promise (<anonymous>)
+    at bcrypt.compare (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:306:20)
+    at login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\src\controllers\auth.js:68:40)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-15T20:52:38.283Z - Login error: Illegal arguments: string, undefined
+Error: Illegal arguments: string, undefined
+    at _async (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:286:46)
+    at C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:307:17
+    at new Promise (<anonymous>)
+    at bcrypt.compare (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:306:20)
+    at login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\src\controllers\auth.js:68:40)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-15T20:54:51.587Z - Login error: Illegal arguments: string, undefined
+Error: Illegal arguments: string, undefined
+    at _async (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:286:46)
+    at C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:307:17
+    at new Promise (<anonymous>)
+    at bcrypt.compare (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:306:20)
+    at login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\src\controllers\auth.js:68:40)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-15T20:55:09.553Z - Login error: Illegal arguments: string, undefined
+Error: Illegal arguments: string, undefined
+    at _async (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:286:46)
+    at C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:307:17
+    at new Promise (<anonymous>)
+    at bcrypt.compare (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:306:20)
+    at login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\src\controllers\auth.js:68:40)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-15T21:06:58.442Z - Signup attempt: {"email":"volumeterminal@gmail.com","password":"JamieZung123!","referrer":""}
+2025-09-15T21:06:58.573Z - User saved: {"email":"volumeterminal@gmail.com","referralCode":"29339e"}
+2025-09-15T21:06:58.718Z - Signup error: Missing credentials for "PLAIN"
+Error: Missing credentials for "PLAIN"
+    at SMTPConnection._formatError (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection.login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:454:38)
+    at C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-transport\index.js:272:32
+    at SMTPConnection.<anonymous> (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:215:17)
+    at Object.onceWrapper (node:events:632:28)
+    at SMTPConnection.emit (node:events:518:28)
+    at SMTPConnection._actionEHLO (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1371:14)
+    at SMTPConnection._processResponse (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+2025-09-15T21:07:11.022Z - Login error: Illegal arguments: string, undefined
+Error: Illegal arguments: string, undefined
+    at _async (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:286:46)
+    at C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:307:17
+    at new Promise (<anonymous>)
+    at bcrypt.compare (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:306:20)
+    at login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\src\controllers\auth.js:68:40)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-15T21:08:02.978Z - Signup attempt: {"email":"adore980@gmail.com","password":"Bajooga57!","referrer":""}
+2025-09-15T21:08:03.070Z - User saved: {"email":"adore980@gmail.com","referralCode":"ec521c"}
+2025-09-15T21:08:03.182Z - Signup error: Missing credentials for "PLAIN"
+Error: Missing credentials for "PLAIN"
+    at SMTPConnection._formatError (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection.login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:454:38)
+    at C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-transport\index.js:272:32
+    at SMTPConnection.<anonymous> (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:215:17)
+    at Object.onceWrapper (node:events:632:28)
+    at SMTPConnection.emit (node:events:518:28)
+    at SMTPConnection._actionEHLO (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1371:14)
+    at SMTPConnection._processResponse (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+2025-09-15T21:08:38.491Z - Login failed for : User not found
+2025-09-15T21:08:45.303Z - Login error: Illegal arguments: string, undefined
+Error: Illegal arguments: string, undefined
+    at _async (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:286:46)
+    at C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:307:17
+    at new Promise (<anonymous>)
+    at bcrypt.compare (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:306:20)
+    at login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\src\controllers\auth.js:68:40)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-15T21:08:46.567Z - Login error: Illegal arguments: string, undefined
+Error: Illegal arguments: string, undefined
+    at _async (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:286:46)
+    at C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:307:17
+    at new Promise (<anonymous>)
+    at bcrypt.compare (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:306:20)
+    at login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\src\controllers\auth.js:68:40)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)

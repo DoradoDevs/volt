@@ -59,15 +59,28 @@ const signup = async (req, res) => {
 
 const login = async (req, res) => {
   const { email, password } = req.body;
-  const user = await User.findOne({ email });
-  if (!user || !(await bcrypt.compare(password, user.password))) {
-    return res.status(400).json({ error: 'Invalid credentials' });
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      log(`Login failed for ${email}: User not found`);
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) {
+      log(`Login failed for ${email}: Invalid password`);
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
+    if (!user.verified) {
+      log(`Login failed for ${email}: Email not verified`);
+      return res.status(400).json({ error: 'Please verify your email' });
+    }
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+    log(`Login successful for ${email}, token: ${token.substring(0, 10)}...`);
+    res.json({ token, user: { email: user.email, tier: user.tier } });
+  } catch (err) {
+    log(`Login error: ${err.message}\n${err.stack}`);
+    res.status(500).json({ error: 'Login failed' + (err.message ? `: ${err.message}` : '') });
   }
-  if (!user.verified) {
-    return res.status(400).json({ error: 'Please verify your email' });
-  }
-  const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
-  res.json({ token, user: { email: user.email, tier: user.tier } });
 };
 
 const verify = async (req, res) => {
