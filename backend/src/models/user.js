@@ -1,24 +1,17 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-  email: { type: String, unique: true },
-  passwordHash: String,
-  verificationCode: String,
-  tier: { type: String, default: 'unranked' },  // unranked, bronze, etc.
-  volume: { type: Number, default: 0 },  // SOL volume
-  referralCode: String,
-  referrer: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  earnedRewards: { type: Number, default: 0 },  // Lamports
-  sourceEncrypted: String,  // Encrypted base58 PK
-  subWalletsEncrypted: [String],  // Array of encrypted base58 PKs
-  rpc: String,
-  tokenMint: String,
-  minBuy: Number,
-  maxBuy: Number,
-  minDelay: Number,
-  maxDelay: Number,
-  mode: String,  // pure, growth, etc.
+  email: { type: String, required: true, unique: true, index: true },
+  verificationCode: { type: String },
+  verificationCodeExpires: { type: Date },      // NEW: expiry
+  tier: { type: String, default: 'unranked' },
+  volume: { type: Number, default: 0 },
+  referralCode: { type: String, required: true },
+  referrer: { type: String, default: null },
+  earnedRewards: { type: Number, default: 0 },
+  subWalletsEncrypted: { type: [String], default: [] },
   running: { type: Boolean, default: false },
-});
+  verified: { type: Boolean, default: false }
+}, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

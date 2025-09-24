@@ -109,3 +109,53 @@ Error: Illegal arguments: string, undefined
     at bcrypt.compare (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:306:20)
     at login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\src\controllers\auth.js:68:40)
     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-24T19:58:15.032Z - Signup attempt: {"email":"solanagamestudios@gmail.com","password":"Bajooga57!","referrer":""}
+2025-09-24T19:58:15.453Z - User saved: {"email":"solanagamestudios@gmail.com","referralCode":"961c60"}
+2025-09-24T19:58:17.458Z - Signup error: Missing credentials for "PLAIN"
+Error: Missing credentials for "PLAIN"
+    at SMTPConnection._formatError (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection.login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:454:38)
+    at C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-transport\index.js:272:32
+    at SMTPConnection.<anonymous> (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:215:17)
+    at Object.onceWrapper (node:events:632:28)
+    at SMTPConnection.emit (node:events:518:28)
+    at SMTPConnection._actionEHLO (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:1371:14)
+    at SMTPConnection._processResponse (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+2025-09-24T19:59:24.499Z - Login error: Illegal arguments: string, undefined
+Error: Illegal arguments: string, undefined
+    at _async (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:286:46)
+    at C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:307:17
+    at new Promise (<anonymous>)
+    at bcrypt.compare (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:306:20)
+    at login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\src\controllers\auth.js:68:40)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-24T20:18:11.686Z - Login error: Illegal arguments: string, undefined
+Error: Illegal arguments: string, undefined
+    at _async (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:286:46)
+    at C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:307:17
+    at new Promise (<anonymous>)
+    at bcrypt.compare (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:306:20)
+    at login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\src\controllers\auth.js:68:40)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-24T20:18:24.041Z - Signup attempt: {"email":"solanagamestudios@gmail.com","password":"Bajooga57!","referrer":""}
+2025-09-24T20:18:24.053Z - User exists: solanagamestudios@gmail.com
+2025-09-24T20:19:28.846Z - Login error: Illegal arguments: string, undefined
+Error: Illegal arguments: string, undefined
+    at _async (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:286:46)
+    at C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:307:17
+    at new Promise (<anonymous>)
+    at bcrypt.compare (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\node_modules\bcryptjs\dist\bcrypt.js:306:20)
+    at login (C:\Users\Clock\OneDrive\Desktop\volt\volt\backend\src\controllers\auth.js:68:40)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2025-09-24T20:38:51.431Z - Login email error: Missing credentials for "PLAIN"
+2025-09-24T20:39:47.918Z - Login email error: Missing credentials for "PLAIN"
+2025-09-24T20:39:51.075Z - Login email error: Missing credentials for "PLAIN"
+2025-09-24T20:42:53.262Z - Login email error: Missing credentials for "PLAIN"
+2025-09-24T20:42:57.110Z - Login email error: Missing credentials for "PLAIN"
+2025-09-24T20:43:02.607Z - Login email error: Missing credentials for "PLAIN"
+2025-09-24T20:59:01.266Z - Verification code sent to: alxdore@gmail.com
+2025-09-24T20:59:16.801Z - Login successful for alxdore@gmail.com, token: eyJhbGciOi...
+2025-09-24T21:16:08.861Z - Verification code sent to: alxdore@gmail.com
+2025-09-24T21:16:34.581Z - Login successful for alxdore@gmail.com, token: eyJhbGciOi...
