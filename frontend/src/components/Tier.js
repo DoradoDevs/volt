@@ -1,25 +1,20 @@
-// frontend/src/components/Tier.js
 import React from 'react';
 
 const Tier = ({ tier }) => {
-  const tierInfo = {
-    unranked: { fee: '1%', referralShare: '10%' },
-    bronze:   { fee: '0.9%', referralShare: '12.5%' },
-    silver:   { fee: '0.8%', referralShare: '15%' },
-    gold:     { fee: '0.7%', referralShare: '20%' },
-    diamond:  { fee: '0.5%', referralShare: '25%' },
-  };
-
-  // Normalize + guard
+  const fees = { unranked: 0.01, bronze: 0.009, silver: 0.008, gold: 0.007, diamond: 0.005 };
   const safeTier = (tier ?? 'unranked').toString().toLowerCase();
-  const info = tierInfo[safeTier] || tierInfo.unranked;
+  const fee = fees[safeTier] ?? 0.01;
+
+  // Base fee is 1%. Discount is (1% - tierFee)
+  const base = 0.01;
+  const discount = Math.max(base - fee, 0);
+
   const pretty = safeTier.charAt(0).toUpperCase() + safeTier.slice(1);
 
   return (
-    <div style={{ margin: '20px 0' }}>
-      <h2>Your Tier: {pretty}</h2>
-      <p>Fee per Transaction: {info.fee}</p>
-      <p>Referral Fee Share: {info.referralShare}</p>
+    <div style={{ margin: '16px 0', border:'1px solid #7B68EE', borderRadius:8, padding:12 }}>
+      <h2 style={{ marginTop:0 }}>Your Tier: {pretty}</h2>
+      <p style={{ marginBottom:0 }}>Your Discount: {(discount * 100).toFixed(2)}%</p>
     </div>
   );
 };

@@ -1,20 +1,14 @@
-const rateLimit = require('express-rate-limit');
+// backend/src/middleware/ratelimit.js
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 
-// Keyed by IP + normalized email (when present)
-const keyGenerator = (req) => {
-  const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown';
-  const email = (req.body?.email || '').trim().toLowerCase();
-  return `${ip}:${email}`;
-};
-
-// Conservative default: 5 requests / minute per IP+email
+// Login/Signup/Verify limiter
 const authLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 5,
-  standardHeaders: true,
+  windowMs: 60 * 1000,     // 1 minute
+  limit: 5,                // 5 requests/min per IP
+  standardHeaders: 'draft-7',
   legacyHeaders: false,
-  keyGenerator,
-  message: { error: 'Too many attempts. Please wait a minute and try again.' },
+  // IMPORTANT: use helper so IPv6 can't bypass
+  keyGenerator: ipKeyGenerator,
 });
 
 module.exports = { authLimiter };

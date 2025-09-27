@@ -1,3 +1,4 @@
+// backend/src/middleware/auth.js
 const jwt = require('jsonwebtoken');
 
 module.exports = function authRequired(req, res, next) {
@@ -7,8 +8,9 @@ module.exports = function authRequired(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // token payload is { id: ... }
     req.userId = decoded.id;
-    next();
+    return next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }

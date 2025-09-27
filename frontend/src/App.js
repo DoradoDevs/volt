@@ -5,31 +5,25 @@ import Login from './components/Login';
 import Verify from './components/Verify';
 import Signup from './components/Signup';
 import Dashboard from './components/Dashboard';
-import ErrorBoundary from './components/ErrorBoundary'; // <-- add this file as shown earlier
+import ErrorBoundary from './components/ErrorBoundary';
+import Header from './components/Header';
 import api from './services/api';
 import './styles/App.css';
 
 const App = () => {
   const [user, setUser] = useState(null);
-  const [email, setEmail] = useState(null); // captured on Login/Signup
-  const [bootstrapping, setBootstrapping] = useState(true); // <-- new
+  const [email, setEmail] = useState(null);
+  const [bootstrapping, setBootstrapping] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token) {
-      setBootstrapping(false);
-      return;
-    }
-    api.get('/auth/me') // or '/dashboard' if you prefer that endpoint
+    if (!token) { setBootstrapping(false); return; }
+    api.get('/auth/me')
       .then((res) => setUser(res.data))
-      .catch(() => {
-        localStorage.removeItem('token');
-        setUser(null);
-      })
-      .finally(() => setBootstrapping(false)); // <-- finish bootstrap
+      .catch(() => { localStorage.removeItem('token'); setUser(null); })
+      .finally(() => setBootstrapping(false));
   }, []);
 
-  // Optional: simple loading gate during bootstrap
   if (bootstrapping) {
     return (
       <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'#4B0082', color:'#E6E6FA' }}>
@@ -42,24 +36,12 @@ const App = () => {
     <Router>
       <ErrorBoundary>
         <div className="App" style={{ backgroundColor: '#4B0082', minHeight: '100vh', color: '#9370DB' }}>
+          {user && <Header email={user.email} />}
           <Routes>
-            <Route
-              path="/login"
-              element={user ? <Navigate to="/dashboard" /> : <Login setEmail={setEmail} />}
-            />
-            <Route
-              path="/verify"
-              element={user ? <Navigate to="/dashboard" /> : <Verify setUser={setUser} email={email} />}
-            />
-            <Route
-              path="/signup"
-              element={user ? <Navigate to="/dashboard" /> : <Signup />}
-            />
-            <Route
-              path="/dashboard"
-              // If your Dashboard fetches its own data, you don't need to pass user/setUser
-              element={user ? <Dashboard /> : <Navigate to="/login" />}
-            />
+            <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login setEmail={setEmail} />} />
+            <Route path="/verify" element={user ? <Navigate to="/dashboard" /> : <Verify setUser={setUser} email={email} />} />
+            <Route path="/signup" element={user ? <Navigate to="/dashboard" /> : <Signup />} />
+            <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
             <Route path="*" element={<Navigate to="/login" />} />
           </Routes>
         </div>

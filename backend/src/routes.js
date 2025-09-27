@@ -1,36 +1,76 @@
+// backend/src/routes.js
 const express = require('express');
-const { signup, login, verify } = require('./controllers/auth');
-const { getDashboard, manageReferral, getTier, manageWallets, depositWithdraw, distribute, consolidate, sellAll, closeAccounts, startBotController, stopBotController, updateSettings } = require('./controllers/dashboard');
-const authMiddleware = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.userId = decoded.id;
-    next();
-  } catch (e) {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-};
+
+// IMPORTANT: paths match your tree (src/middleware/*.js, src/controllers/*.js)
+const { authLimiter } = require('./middleware/ratelimit');
+const authRequired = require('./middleware/auth');
+
+const { signup, login, verify, me } = require('./controllers/auth');
+const {
+  // overview
+  getDashboard,
+  // referrals
+  manageReferral,
+  getTier,
+  // wallets
+  listWallets,
+  manageWallets,          // legacy bulk add/remove
+  addOneWallet,           // add a single sub-wallet
+  removeWalletByAddress,  // remove one sub-wallet by address
+  getDepositAddress,      // ensure + return deposit address
+  newDepositAddress,      // rotate deposit address
+  setActiveWallets,       // choose wallets for bot
+  // funds
+  depositWithdraw,
+  distribute,
+  consolidate,
+  sellAll,
+  closeAccounts,
+  // bot + settings
+  startBotController,
+  stopBotController,
+  updateSettings,
+  getSettings,
+  // portfolio
+  portfolio,
+} = require('./controllers/dashboard');
 
 const router = express.Router();
 
-router.post('/signup', signup);
-router.post('/login', login);
-router.post('/verify', verify);
+/** ---------- Public auth (rate-limited) ---------- **/
+router.post('/signup', authLimiter, signup);
+router.post('/login', authLimiter, login);
+router.post('/verify', authLimiter, verify);
 
-// Protected
-router.get('/dashboard', authMiddleware, getDashboard);
-router.post('/referral/claim', authMiddleware, manageReferral);
-router.get('/tier', authMiddleware, getTier);
-router.post('/wallets/manage', authMiddleware, manageWallets);
-router.post('/funds/deposit-withdraw', authMiddleware, depositWithdraw);
-router.post('/funds/distribute', authMiddleware, distribute);
-router.post('/funds/consolidate', authMiddleware, consolidate);
-router.post('/funds/sell-all', authMiddleware, sellAll);
-router.post('/funds/close-accounts', authMiddleware, closeAccounts);
-router.post('/bot/start', authMiddleware, startBotController);
-router.post('/bot/stop', authMiddleware, stopBotController);
-router.post('/settings/update', authMiddleware, updateSettings);
+/** ---------- Identity/bootstrap ---------- **/
+router.get('/auth/me', authRequired, me);
+router.get('/dashboard', authRequired, getDashboard);
+
+/** ---------- Wallets & Portfolio ---------- **/
+router.get('/wallets/list', authRequired, listWallets);
+router.post('/wallets/add-one', authRequired, addOneWallet);
+router.post('/wallets/remove-one', authRequired, removeWalletByAddress);
+router.get('/wallets/deposit-address', authRequired, getDepositAddress);
+router.post('/wallets/deposit-new', authRequired, newDepositAddress);
+router.post('/wallets/active', authRequired, setActiveWallets);
+router.get('/portfolio', authRequired, portfolio);
+
+/** ---------- Referrals ---------- **/
+router.post('/referral/claim', authRequired, manageReferral);
+router.get('/tier', authRequired, getTier);
+
+/** ---------- Wallet admin + funds ---------- **/
+router.post('/wallets/manage', authRequired, manageWallets); // legacy bulk add/remove if you still need it
+router.post('/funds/deposit-withdraw', authRequired, depositWithdraw);
+router.post('/funds/distribute', authRequired, distribute);
+router.post('/funds/consolidate', authRequired, consolidate);
+router.post('/funds/sell-all', authRequired, sellAll);
+router.post('/funds/close-accounts', authRequired, closeAccounts);
+
+/** ---------- Bot + settings ---------- **/
+router.post('/bot/start', authRequired, startBotController);
+router.post('/bot/stop', authRequired, stopBotController);
+router.post('/settings/update', authRequired, updateSettings);
+router.get('/settings/get', authRequired, getSettings);
 
 module.exports = router;

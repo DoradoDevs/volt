@@ -1,146 +1,109 @@
 // backend/src/controllers/auth.js
-const User = require('../models/user');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-const fs = require('fs');
+const web3 = require('@solana/web3.js');
+const bs58 = require('bs58');
 
-const logFile = 'signup.log';
-const log = (m) => fs.appendFileSync(logFile, `${new Date().toISOString()} - ${m}\n`);
+const User = require('../models/user');
+const { encrypt } = require('../services/solana');
+const { sendEmail } = require('../config/email'); // << correct path
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-});
+const normalizeEmail = (e) => (e || '').trim().toLowerCase();
+const generateCode = () => Math.floor(100000 + Math.random() * 900000).toString();
+const tokenFor = (userId) => jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
-const sendVerificationEmail = async (email, code) => {
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: 'Your Verification Code',
-    text: `Your verification code is ${code}. It expires in 10 minutes.`,
-  };
-  await transporter.sendMail(mailOptions);
-};
+async function ensureDepositWallet(user) {
+  if (!user.sourceEncrypted) {
+    const kp = web3.Keypair.generate();
+    user.sourceEncrypted = encrypt(bs58.encode(kp.secretKey));
+  }
+}
 
-const newCode = () => crypto.randomBytes(3).toString('hex'); // 6 hex chars
-const codeExpiry = () => new Date(Date.now() + 10 * 60 * 1000);
-const normalize = (s='') => s.trim().toLowerCase();
+async function issueCodeAndEmail(user, email) {
+  const code = generateCode();                 // ALWAYS random for email
+  user.verificationCode = code;
+  user.verificationCodeExpires = new Date(Date.now() + 15 * 60 * 1000);
 
-const signup = async (req, res) => {
-  log(`Signup attempt: ${JSON.stringify(req.body)}`);
-  const email = normalize(req.body.email);
-  const { referrer } = req.body;
-  if (!email) return res.status(400).json({ error: 'Email required' });
+  // DEBUG: log the code we’re saving/sending
+  console.log(`[auth] issuing code for ${email}: ${code}`);
+
+  await user.save();
 
   try {
-    const existing = await User.findOne({ email });
-    if (existing) return res.status(400).json({ error: 'User exists' });
-
-    const verificationCode = newCode();
-    const referralCode = newCode();
-
-    const user = new User({
+    await sendEmail(
       email,
-      verificationCode,
-      verificationCodeExpires: codeExpiry(),
-      referralCode,
-      referrer: referrer || null
-    });
-
-    await user.save();
-    await sendVerificationEmail(email, verificationCode);
-    log(`User saved: ${JSON.stringify({ email, referralCode })}`);
-    res.json({ message: 'Verification code sent' });
-  } catch (err) {
-    log(`Signup error: ${err.message}`);
-    res.status(500).json({ error: 'Signup failed: ' + err.message });
+      'Your VolT verification code',
+      `Your verification code is: ${code}\nIt expires in 15 minutes.`
+    );
+    console.log(`[auth] email dispatched to ${email}`);
+  } catch (e) {
+    console.warn('[auth] sendEmail failed:', e.message);
   }
-};
+}
 
-const login = async (req, res) => {
-  const email = normalize(req.body.email);
+/** POST /signup { email, referrer? } */
+const signup = async (req, res) => {
+  const email = normalizeEmail(req.body.email);
+  const referrer = req.body.referrer || null;
   if (!email) return res.status(400).json({ error: 'Email required' });
 
-  try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ error: 'User not found' });
-
-    user.verificationCode = newCode();
-    user.verificationCodeExpires = codeExpiry();
-    await user.save();
-
-    await sendVerificationEmail(email, user.verificationCode);
-    log(`Verification code sent to: ${email}`);
-    res.json({ message: 'Verification code sent' });
-  } catch (err) {
-    log(`Login email error: ${err.message}`);
-    res.status(500).json({ error: 'Failed to send verification code: ' + err.message });
+  let user = await User.findOne({ email });
+  if (!user) {
+    const referralCode = crypto.randomBytes(3).toString('hex');
+    user = await User.create({ email, referralCode, referrer });
   }
+
+  await ensureDepositWallet(user);
+  await issueCodeAndEmail(user, email);
+  res.json({ ok: true });
 };
 
+/** POST /login { email } */
+const login = async (req, res) => {
+  const email = normalizeEmail(req.body.email);
+  if (!email) return res.status(400).json({ error: 'Email required' });
+
+  const user = await User.findOne({ email });
+  if (!user) return res.status(404).json({ error: 'No account found, please sign up' });
+
+  await ensureDepositWallet(user);
+  await issueCodeAndEmail(user, email);
+  res.json({ ok: true });
+};
+
+/** POST /verify { email, code } */
 const verify = async (req, res) => {
-  const email = normalize(req.body.email);
+  const email = normalizeEmail(req.body.email);
   const code = (req.body.code || '').trim();
-  if (!email || !code) return res.status(400).json({ error: 'Email and code required' });
 
-  try {
-    // DEV BYPASS: if BYPASS_CODE is set and matches, skip DB check
-    if (process.env.BYPASS_CODE && code === process.env.BYPASS_CODE) {
-      const user = await User.findOne({ email });
-      if (!user) return res.status(400).json({ error: 'User not found' });
+  const user = await User.findOne({ email });
+  if (!user) return res.status(404).json({ error: 'No account found' });
 
-      user.verified = true;
-      user.verificationCode = null;
-      user.verificationCodeExpires = null;
-      await user.save();
+  const now = new Date();
+  const bypass = process.env.BYPASS_CODE && code === process.env.BYPASS_CODE; // allowed only at verify
+  const emailedValid =
+    user.verificationCode === code &&
+    user.verificationCodeExpires &&
+    user.verificationCodeExpires > now;
 
-      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-      log(`(BYPASS) Login successful for ${email}, token: ${token.substring(0,10)}...`);
-      return res.json({ token, user: { email: user.email, tier: user.tier } });
-    }
-
-    const user = await User.findOne({ email, verificationCode: code });
-    if (!user) return res.status(400).json({ error: 'Invalid code or email' });
-
-    if (!user.verificationCodeExpires || user.verificationCodeExpires < new Date()) {
-      return res.status(400).json({ error: 'Code expired. Please request a new one.' });
-    }
-
-    user.verified = true;
-    user.verificationCode = null;
-    user.verificationCodeExpires = null;
-    await user.save();
-
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    log(`Login successful for ${email}, token: ${token.substring(0,10)}...`);
-    res.json({ token, user: { email: user.email, tier: user.tier } });
-  } catch (err) {
-    log(`Verify error: ${err.message}`);
-    res.status(500).json({ error: 'Verification failed: ' + err.message });
+  if (!(bypass || emailedValid)) {
+    return res.status(400).json({ error: 'Invalid or expired code' });
   }
+
+  user.verified = true;
+  user.verificationCode = null;
+  user.verificationCodeExpires = null;
+  await user.save();
+
+  const token = tokenFor(user._id.toString());
+  res.json({ token, user: { email: user.email } });
 };
 
-// NEW: return user info from token
+/** GET /auth/me */
 const me = async (req, res) => {
-  try {
-    const user = await User.findById(req.userId).lean();
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ email: user.email, tier: user.tier, verified: user.verified });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch user' });
-  }
+  const user = await User.findById(req.userId).lean();
+  if (!user) return res.status(404).json({ error: 'Not found' });
+  res.json({ email: user.email });
 };
 
-// Optional: keep existing frontend call `/dashboard`
-const dashboard = async (req, res) => {
-  try {
-    const user = await User.findById(req.userId).lean();
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ email: user.email, tier: user.tier, verified: user.verified });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch user' });
-  }
-};
-
-module.exports = { signup, login, verify, me, dashboard };
+module.exports = { signup, login, verify, me };
