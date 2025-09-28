@@ -1,19 +1,20 @@
 // backend/src/routes.js
 const express = require('express');
 
-// IMPORTANT: paths match your tree (src/middleware/*.js, src/controllers/*.js)
+// Paths match your tree: src/middleware/*.js, src/controllers/*.js
 const { authLimiter } = require('./middleware/ratelimit');
 const authRequired = require('./middleware/auth');
 
+// Auth controllers
 const { signup, login, verify, me } = require('./controllers/auth');
+
+// App controllers
 const {
   // overview
   getDashboard,
   // referrals
   manageReferral,
   getTier,
-  listReferrals,        // NEW
-  setReferrerByCode,    // NEW
   // wallets
   listWallets,
   manageWallets,          // legacy bulk add/remove
@@ -21,7 +22,7 @@ const {
   removeWalletByAddress,  // remove one sub-wallet by address
   getDepositAddress,      // ensure + return deposit address
   newDepositAddress,      // rotate deposit address
-  setActiveWallets,       // choose wallets for bot
+  setActiveWallets,       // choose wallets for bot (sub-wallets only)
   // funds
   depositWithdraw,
   distribute,
@@ -55,16 +56,15 @@ router.post('/wallets/remove-one', authRequired, removeWalletByAddress);
 router.get('/wallets/deposit-address', authRequired, getDepositAddress);
 router.post('/wallets/deposit-new', authRequired, newDepositAddress);
 router.post('/wallets/active', authRequired, setActiveWallets);
+
 router.get('/portfolio', authRequired, portfolio);
 
 /** ---------- Referrals ---------- **/
 router.post('/referral/claim', authRequired, manageReferral);
-router.get('/referral/list', authRequired, listReferrals);       // NEW
-router.post('/referral/set', authRequired, setReferrerByCode);   // NEW
 router.get('/tier', authRequired, getTier);
 
 /** ---------- Wallet admin + funds ---------- **/
-router.post('/wallets/manage', authRequired, manageWallets); // legacy bulk add/remove if you still need it
+router.post('/wallets/manage', authRequired, manageWallets); // legacy bulk add/remove
 router.post('/funds/deposit-withdraw', authRequired, depositWithdraw);
 router.post('/funds/distribute', authRequired, distribute);
 router.post('/funds/consolidate', authRequired, consolidate);

@@ -9,7 +9,6 @@ const {
 const { startBot, stopBot } = require('../services/bot');
 
 const TOKEN_PROGRAM_ID = new web3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-const MIN_REFERRAL_CLAIM_SOL = 0.05;
 
 /** ---------- Overview ---------- */
 const getDashboard = async (req, res) => {
@@ -29,7 +28,6 @@ const getDashboard = async (req, res) => {
   res.json({
     email: user.email,
     tier: user.tier,
-    volume: user.volume || 0,
     referralCode: user.referralCode,
     earnedRewards: (user.earnedRewards || 0) / web3.LAMPORTS_PER_SOL,
     sourceAddress,
@@ -46,10 +44,8 @@ const manageReferral = async (req, res) => {
 
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
-
-  const minLamports = MIN_REFERRAL_CLAIM_SOL * web3.LAMPORTS_PER_SOL;
-  if (!user.earnedRewards || user.earnedRewards < minLamports) {
-    return res.status(400).json({ error: `Minimum claim is ${MIN_REFERRAL_CLAIM_SOL} SOL` });
+  if (!user.earnedRewards || user.earnedRewards === 0) {
+    return res.status(400).json({ error: 'No rewards' });
   }
 
   const txid = await payOutRewards({
@@ -63,43 +59,6 @@ const manageReferral = async (req, res) => {
   res.json({ txid });
 };
 
-// NEW: allow user to set/change their referrer after signup using a referral code
-const setReferrerByCode = async (req, res) => {
-  const { code } = req.body;
-  if (!code) return res.status(400).json({ error: 'Referral code required' });
-
-  const me = await User.findById(req.userId);
-  if (!me) return res.status(404).json({ error: 'User not found' });
-
-  const referrer = await User.findOne({ referralCode: code.trim() });
-  if (!referrer) return res.status(404).json({ error: 'Referral code not found' });
-  if (referrer._id.toString() === me._id.toString()) {
-    return res.status(400).json({ error: 'You cannot refer yourself' });
-  }
-
-  me.referrer = referrer._id.toString();
-  await me.save();
-  res.json({ ok: true, referrerEmail: referrer.email });
-};
-
-const listReferrals = async (req, res) => {
-  const me = await User.findById(req.userId).lean();
-  if (!me) return res.status(404).json({ error: 'User not found' });
-
-  const map = new Map();
-  (me.referralEarnings || []).forEach(e => map.set(e.userId, e.lamports));
-  const ids = Array.from(map.keys());
-  const referees = ids.length ? await User.find({ _id: { $in: ids } }, { email: 1 }).lean() : [];
-
-  const rows = referees.map(r => ({
-    userId: r._id.toString(),
-    email: r.email,
-    earnedSOL: ((map.get(r._id.toString()) || 0) / web3.LAMPORTS_PER_SOL).toFixed(6)
-  }));
-
-  res.json({ referrals: rows });
-};
-
 const getTier = async (req, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
@@ -107,6 +66,7 @@ const getTier = async (req, res) => {
 };
 
 /** ---------- Wallet management ---------- */
+// Legacy bulk add/remove by count (kept for API compatibility)
 const manageWallets = async (req, res) => {
   const { action, count = 0, confirm } = req.body;
   const user = await User.findById(req.userId);
@@ -128,8 +88,9 @@ const manageWallets = async (req, res) => {
   res.json({ message: 'Wallets updated', total: user.subWalletsEncrypted.length });
 };
 
-const addOneWallet = async (req, res) => {
-  const user = await User.findById(req.userId);
+// NEW: add a single sub-wallet
+const addOneWallet = async (_req, res) => {
+  const user = await User.findById(_req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
   if (user.subWalletsEncrypted.length >= 100) return res.status(400).json({ error: 'Max 100 sub-wallets' });
 
@@ -141,6 +102,7 @@ const addOneWallet = async (req, res) => {
   res.json({ address });
 };
 
+// NEW: remove a single sub-wallet by address
 const removeWalletByAddress = async (req, res) => {
   const { address, confirm } = req.body;
   if (!address || confirm !== 'confirm') return res.status(400).json({ error: 'Address and confirm required' });
@@ -148,6 +110,7 @@ const removeWalletByAddress = async (req, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
+  // only remove from sub-wallets; never remove source here
   let removed = false;
   user.subWalletsEncrypted = (user.subWalletsEncrypted || []).filter((enc) => {
     try {
@@ -164,15 +127,17 @@ const removeWalletByAddress = async (req, res) => {
   res.json({ ok: true });
 };
 
+// helper to sync activeWallets with real wallets
 function pruneActiveWallets(user) {
   const valid = new Set();
-  try { if (user.sourceEncrypted) valid.add(getKeypair(user.sourceEncrypted).publicKey.toString()); } catch (_) {}
+  // NOTE: deposit (source) is intentionally NOT valid for activeWallets
   for (const enc of user.subWalletsEncrypted) {
     try { valid.add(getKeypair(enc).publicKey.toString()); } catch (_) {}
   }
   user.activeWallets = (user.activeWallets || []).filter(a => valid.has(a));
 }
 
+// list wallets + SOL balances (source + subs)
 const listWallets = async (req, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
@@ -198,6 +163,7 @@ const listWallets = async (req, res) => {
   res.json({ wallets, active: user.activeWallets || [] });
 };
 
+// ensure + return deposit address
 const getDepositAddress = async (req, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
@@ -211,6 +177,7 @@ const getDepositAddress = async (req, res) => {
   res.json({ sourceAddress: pub });
 };
 
+// rotate deposit address (old source becomes a sub-wallet)
 const newDepositAddress = async (req, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
@@ -224,15 +191,18 @@ const newDepositAddress = async (req, res) => {
   res.json({ sourceAddress: pub });
 };
 
+// choose which wallets the bot uses (SUB wallets only)
 const setActiveWallets = async (req, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
   const addresses = Array.isArray(req.body.addresses) ? req.body.addresses : [];
 
+  // Allowed = only SUB wallets (exclude deposit/source)
   const allowed = new Set();
-  try { if (user.sourceEncrypted) allowed.add(getKeypair(user.sourceEncrypted).publicKey.toString()); } catch (_) {}
-  for (const enc of user.subWalletsEncrypted) { try { allowed.add(getKeypair(enc).publicKey.toString()); } catch (_) {} }
+  for (const enc of user.subWalletsEncrypted) {
+    try { allowed.add(getKeypair(enc).publicKey.toString()); } catch (_) {}
+  }
 
   user.activeWallets = addresses.filter(a => allowed.has(a));
   await user.save();
@@ -245,6 +215,7 @@ const depositWithdraw = async (req, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
+  // Ensure source exists
   if (!user.sourceEncrypted) {
     const kp = web3.Keypair.generate();
     user.sourceEncrypted = encrypt(bs58.encode(kp.secretKey));
@@ -387,9 +358,18 @@ const updateSettings = async (req, res) => {
 const getSettings = async (req, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  const addresses = [];
-  try { if (user.sourceEncrypted) addresses.push(getKeypair(user.sourceEncrypted).publicKey.toString()); } catch (_) {}
-  for (const enc of user.subWalletsEncrypted) { try { addresses.push(getKeypair(enc).publicKey.toString()); } catch (_) {} }
+
+  // IMPORTANT: expose ONLY SUB wallets to the picker; never include deposit/source
+  const subAddresses = [];
+  for (const enc of user.subWalletsEncrypted) {
+    try { subAddresses.push(getKeypair(enc).publicKey.toString()); } catch (_) {}
+  }
+
+  // Also make sure any existing activeWallets are trimmed to sub-wallets only
+  const allowed = new Set(subAddresses);
+  user.activeWallets = (user.activeWallets || []).filter(a => allowed.has(a));
+  await user.save();
+
   res.json({
     tokenMint: user.tokenMint || '',
     rpc: user.rpc || '',
@@ -400,7 +380,7 @@ const getSettings = async (req, res) => {
     mode: user.mode || 'pure',
     running: !!user.running,
     activeWallets: user.activeWallets || [],
-    allWallets: addresses
+    allWallets: subAddresses, // <-- sub wallets only
   });
 };
 
@@ -439,7 +419,7 @@ module.exports = {
   // overview
   getDashboard,
   // referrals
-  manageReferral, setReferrerByCode, listReferrals, getTier,
+  manageReferral, getTier,
   // wallets
   manageWallets, listWallets, addOneWallet, removeWalletByAddress,
   getDepositAddress, newDepositAddress, setActiveWallets,

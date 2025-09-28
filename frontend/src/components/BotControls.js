@@ -25,7 +25,6 @@ const Panel = ({ children }) => (
       padding: 14,
       maxWidth: 860,
       margin: '0 auto',
-      // IMPORTANT: allow dropdown to render outside
       overflow: 'visible',
       boxSizing: 'border-box',
       position: 'relative',
@@ -98,7 +97,6 @@ const ModePicker = ({ value, onChange, options }) => {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
 
-  // close on outside click
   useEffect(() => {
     const onDoc = (e) => {
       if (!wrapRef.current) return;
@@ -140,16 +138,16 @@ const ModePicker = ({ value, onChange, options }) => {
           role="listbox"
           style={{
             position: 'absolute',
-            zIndex: 1000,             // bumped to ensure it sits over containers
+            zIndex: 1000,
             left: 0,
             right: 0,
             marginTop: 6,
             borderRadius: 10,
             border: `1px solid ${palette.inputBorder}`,
-            background: palette.inputBg,
+            background: '#2a1a40', // solid background (no transparency)
             boxShadow: '0 12px 28px rgba(0,0,0,0.45)',
             overflow: 'hidden',
-            transform: 'translateZ(0)', // create own stacking context
+            transform: 'translateZ(0)',
           }}
         >
           {options.map((opt) => {
@@ -171,11 +169,11 @@ const ModePicker = ({ value, onChange, options }) => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  background: active ? 'rgba(123,104,238,0.25)' : 'transparent',
+                  background: active ? '#3a006f' : 'transparent',
                   cursor: 'pointer',
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(123,104,238,0.2)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = active ? 'rgba(123,104,238,0.25)' : 'transparent'; }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#4B0082'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = active ? '#3a006f' : 'transparent'; }}
               >
                 <span>{opt.label}</span>
                 {active && <span style={{ opacity: 0.9 }}>✓</span>}
@@ -203,11 +201,12 @@ const BotControls = ({ running }) => {
   const [starting, setStarting] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [errors, setErrors] = useState({});
-  const [allWallets, setAllWallets] = useState([]);           // array of addresses (strings)
+  const [allWallets, setAllWallets] = useState([]);           // addresses
   const [walletBalances, setWalletBalances] = useState({});   // address -> number
   const [activeWallets, setActiveWallets] = useState([]);
+  const [showHelp, setShowHelp] = useState(false);
 
-  // Load settings first
+  // Load settings
   useEffect(() => {
     (async () => {
       try {
@@ -229,7 +228,7 @@ const BotControls = ({ running }) => {
     })();
   }, []);
 
-  // Then fetch balances for wallets
+  // Load wallet balances
   useEffect(() => {
     (async () => {
       try {
@@ -247,7 +246,7 @@ const BotControls = ({ running }) => {
     })();
   }, []);
 
-  // Keep inputs as TEXT to avoid the 1-char issue
+  // Validation (keep inputs as text to avoid the 1-char focus bug)
   const validation = useMemo(() => {
     const errs = {};
     if (!tokenMint || !BASE58_RE.test(tokenMint.trim())) errs.tokenMint = 'Enter a valid Solana mint address.';
@@ -430,6 +429,101 @@ const BotControls = ({ running }) => {
         )}
         {errors.activeWallets && <div style={{ color: 'salmon', fontSize: 12, marginTop: 6 }}>{errors.activeWallets}</div>}
       </Panel>
+
+      {/* Floating help button */}
+      <div
+        onClick={() => setShowHelp(true)}
+        title="How VolT works"
+        style={{
+          position: 'fixed',
+          bottom: 30,
+          right: 30,
+          width: 42,
+          height: 42,
+          borderRadius: '50%',
+          background: '#7B68EE',
+          color: '#fff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          fontWeight: 'bold',
+          fontSize: 18,
+          boxShadow: '0 4px 10px rgba(0,0,0,0.4)',
+          zIndex: 1500,
+        }}
+      >
+        ?
+      </div>
+
+      {/* Help modal */}
+      {showHelp && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+          }}
+          onClick={() => setShowHelp(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#2a1a40',
+              padding: '28px 32px',
+              borderRadius: 12,
+              maxWidth: 640,
+              width: '92%',
+              color: '#E6E6FA',
+              lineHeight: 1.5,
+              boxShadow: '0 12px 28px rgba(0,0,0,0.45)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <h3 style={{ margin: 0 }}>How VolT Works</h3>
+              <button
+                onClick={() => setShowHelp(false)}
+                style={{
+                  background: '#7B68EE',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '6px 12px',
+                  color: '#fff',
+                  cursor: 'pointer',
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <p><strong>Modes</strong></p>
+            <ul>
+              <li><strong>Pure:</strong> Buys then sells full amount each cycle (tight loops).</li>
+              <li><strong>Growth:</strong> Buys then sells ~90% to accumulate small bags over time.</li>
+              <li><strong>Moonshot:</strong> Buys only; no auto-sell.</li>
+              <li><strong>Human:</strong> Randomized squads buy quickly, then staggered sells to mimic human activity.</li>
+              <li><strong>Bump:</strong> Continuous buy/sell across all wallets (steady bumps).</li>
+            </ul>
+
+            <p><strong>Deposits</strong><br />
+              Your account has a deposit address (primary wallet) created automatically. Send SOL there.
+              You can generate new deposit addresses; older ones remain usable.
+            </p>
+
+            <p><strong>Withdrawals</strong><br />
+              From the Wallets page, withdraw SOL from your deposit wallet to any address. Use “MAX” for full balance.
+            </p>
+
+            <p><strong>Tier Discounts</strong><br />
+              Bronze 10%, Silver 20%, Gold 30%, Diamond 50%.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
