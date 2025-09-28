@@ -1,20 +1,24 @@
 import React from 'react';
 
+// Show only the DISCOUNT now; base fee is handled on the backend.
+// Keeping original discount steps: Bronze 10%, Silver 20%, Gold 30%, Diamond 50%.
 const Tier = ({ tier }) => {
-  const fees = { unranked: 0.01, bronze: 0.009, silver: 0.008, gold: 0.007, diamond: 0.005 };
+  const discountByTier = {
+    unranked: 0,
+    bronze:   10,
+    silver:   20,
+    gold:     30,
+    diamond:  50,
+  };
+
   const safeTier = (tier ?? 'unranked').toString().toLowerCase();
-  const fee = fees[safeTier] ?? 0.01;
-
-  // Base fee is 1%. Discount is (1% - tierFee)
-  const base = 0.01;
-  const discount = Math.max(base - fee, 0);
-
   const pretty = safeTier.charAt(0).toUpperCase() + safeTier.slice(1);
+  const discount = discountByTier[safeTier] ?? 0;
 
   return (
     <div style={{ margin: '16px 0', border:'1px solid #7B68EE', borderRadius:8, padding:12 }}>
       <h2 style={{ marginTop:0 }}>Your Tier: {pretty}</h2>
-      <p style={{ marginBottom:0 }}>Your Discount: {(discount * 100).toFixed(2)}%</p>
+      <p style={{ marginBottom:0 }}>Your Discount: {discount.toFixed(0)}%</p>
     </div>
   );
 };

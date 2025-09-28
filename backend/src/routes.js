@@ -12,6 +12,8 @@ const {
   // referrals
   manageReferral,
   getTier,
+  listReferrals,        // NEW
+  setReferrerByCode,    // NEW
   // wallets
   listWallets,
   manageWallets,          // legacy bulk add/remove
@@ -57,6 +59,8 @@ router.get('/portfolio', authRequired, portfolio);
 
 /** ---------- Referrals ---------- **/
 router.post('/referral/claim', authRequired, manageReferral);
+router.get('/referral/list', authRequired, listReferrals);       // NEW
+router.post('/referral/set', authRequired, setReferrerByCode);   // NEW
 router.get('/tier', authRequired, getTier);
 
 /** ---------- Wallet admin + funds ---------- **/

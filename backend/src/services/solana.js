@@ -38,19 +38,30 @@ const getKeypair = ensureInitialized((encrypted) => {
 // Connections
 const getConnection = ensureInitialized((rpc) => new web3.Connection(rpc || process.env.SOLANA_RPC));
 
-// Fees/tiers
+// Fees/tiers — CHANGED to 0.1% base (0.001), with same discount steps as before
 const getTierFee = ensureInitialized((tier) => {
-  const fees = { unranked: 0.01, bronze: 0.009, silver: 0.008, gold: 0.007, diamond: 0.005 };
-  return fees[tier] ?? 0.01;
+  const fees = { unranked: 0.001, bronze: 0.0009, silver: 0.0008, gold: 0.0007, diamond: 0.0005 };
+  return fees[tier] ?? 0.001;
 });
 const getReferralShare = ensureInitialized((tier) => {
   const shares = { unranked: 0.1, bronze: 0.125, silver: 0.15, gold: 0.2, diamond: 0.25 };
   return shares[tier] ?? 0.1;
 });
 
+// Track per-referee earnings (lamports) on the referrer doc
+async function addReferralEarningLamports(referrerUser, refereeUserId, lamports) {
+  const idx = (referrerUser.referralEarnings || []).findIndex(e => e.userId === refereeUserId.toString());
+  if (idx >= 0) {
+    referrerUser.referralEarnings[idx].lamports += Math.floor(lamports);
+  } else {
+    referrerUser.referralEarnings.push({ userId: refereeUserId.toString(), lamports: Math.floor(lamports) });
+  }
+  await referrerUser.save();
+}
+
 // Add our fee + (optional) referral
 const addFeeInstructions = ensureInitialized(async (serializedVtx, signer, nominalSolAmount, user, connection) => {
-  const tierRate = getTierFee(user.tier);
+  const tierRate = getTierFee(user.tier); // now ~0.1% base
   const totalLamports = Math.floor(nominalSolAmount * tierRate * web3.LAMPORTS_PER_SOL);
 
   const extra = [web3.ComputeBudgetProgram.setComputeUnitLimit({ units: 500_000 })];
@@ -61,11 +72,13 @@ const addFeeInstructions = ensureInitialized(async (serializedVtx, signer, nomin
     if (refShare > 0) {
       extra.push(web3.SystemProgram.transfer({
         fromPubkey: signer.publicKey,
-        toPubkey: REWARDS_WALLET, // keep rewards pool, then payout claims
+        toPubkey: REWARDS_WALLET, // pool; claims pay out from here
         lamports: refShare,
       }));
-      referrer.earnedRewards += refShare;
-      await referrer.save();
+      if (referrer) {
+        referrer.earnedRewards += refShare;
+        await addReferralEarningLamports(referrer, user._id, refShare);
+      }
     }
     const appShare = totalLamports - refShare;
     if (appShare > 0) {

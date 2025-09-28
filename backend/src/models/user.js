@@ -1,5 +1,10 @@
 const mongoose = require('mongoose');
 
+const referralEarningSchema = new mongoose.Schema({
+  userId: { type: String, required: true },   // referee user id
+  lamports: { type: Number, default: 0 }      // total earned from this user
+}, { _id: false });
+
 const userSchema = new mongoose.Schema({
   // identity
   email: { type: String, required: true, unique: true, index: true },
@@ -15,6 +20,7 @@ const userSchema = new mongoose.Schema({
   referralCode: { type: String, required: true },
   referrer: { type: String, default: null },
   earnedRewards: { type: Number, default: 0 }, // lamports
+  referralEarnings: { type: [referralEarningSchema], default: [] }, // NEW
 
   // wallets + settings
   sourceEncrypted: { type: String, default: null },     // primary deposit wallet (encrypted)
