@@ -1,80 +1,106 @@
-import React, { useEffect, useState, useCallback } from 'react';
+// frontend/src/components/Dashboard.js
+import React, { useEffect, useRef, useState } from 'react';
 import api from '../services/api';
 import WalletManager from './WalletManager';
 import BotControls from './BotControls';
 import Referral from './Referral';
 import Tier from './Tier';
+import Activity from './Activity';
 
-const TabButton = ({ active, onClick, children }) => (
-  <button
-    onClick={onClick}
-    style={{
-      background: active ? '#7B68EE' : 'transparent',
-      border: '1px solid #7B68EE',
-      color: '#E6E6FA',
-      padding: '8px 14px',
-      borderRadius: 6,
-      marginRight: 8
-    }}
-  >
-    {children}
-  </button>
-);
-
-const Progress = ({ volume }) => {
-  const tiers = [
-    { name:'Unranked', min:0, next:100 },
-    { name:'Bronze', min:100, next:250 },
-    { name:'Silver', min:250, next:500 },
-    { name:'Gold', min:500, next:1000 },
-    { name:'Diamond', min:1000, next:null },
+const Tabs = ({ tab, setTab }) => {
+  const tabs = [
+    { id: 'volume', label: 'Volume Panel' },
+    { id: 'wallets', label: 'Wallets' },
+    { id: 'portfolio', label: 'Portfolio' },
+    { id: 'rewards', label: 'Rewards' },
+    { id: 'activity', label: 'Activity' },
   ];
-  const t = tiers.findLast(t => volume >= t.min) || tiers[0];
-  const remaining = t.next ? Math.max(0, t.next - volume) : 0;
-  const pct = t.next ? Math.min(100, Math.round(((volume - t.min) / (t.next - t.min)) * 100)) : 100;
-
   return (
-    <div style={{ margin:'16px 0' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, opacity:0.9 }}>
-        <span>{t.name}</span>
-        {t.next ? <span>{volume.toFixed(2)} / {t.next} SOL</span> : <span>{volume.toFixed(2)} SOL</span>}
+    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {tabs.map(t => {
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 10,
+                border: `1px solid ${active ? '#7B68EE' : 'rgba(230,230,250,0.25)'}`,
+                background: active ? 'rgba(123,104,238,0.15)' : 'rgba(255,255,255,0.04)',
+                color: '#E6E6FA',
+                cursor: 'pointer',
+                fontWeight: 600
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
       </div>
-      <div style={{ height:10, background:'rgba(255,255,255,0.2)', borderRadius:6, marginTop:4 }}>
-        <div style={{ width:`${pct}%`, height:10, background:'#7B68EE', borderRadius:6 }} />
-      </div>
-      {t.next && <div style={{ fontSize:12, opacity:0.8, marginTop:4 }}>Need {remaining.toFixed(2)} SOL to reach {tiers[tiers.indexOf(t)+1]?.name}</div>}
     </div>
   );
 };
 
+const Card = ({ children }) => (
+  <div style={{
+    background: 'rgba(255,192,203,0.08)',
+    border: '1px solid rgba(255,192,203,0.25)',
+    borderRadius: 14,
+    padding: 14,
+  }}>
+    {children}
+  </div>
+);
+
 const Dashboard = () => {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState('overview'); // overview | wallets | portfolio | referrals
-  const [portfolio, setPortfolio] = useState([]);
+  const [tab, setTab] = useState('volume');
 
-  const loadDashboard = useCallback(async () => {
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await api.get('/dashboard');
+        setData(res.data || {});
+      } catch (e) {
+        console.error(e);
+        setError(e.response?.data?.error || 'Failed to load dashboard');
+        setData({});
+      }
+    };
+    fetchData();
+  }, []);
+
+  const safeTier = data?.tier ?? 'unranked';
+
+  // Portfolio state + 30s throttle (front-end respects backend cache)
+  const [portfolio, setPortfolio] = useState([]);
+  const [pLoading, setPLoading] = useState(false);
+  const [pErr, setPErr] = useState('');
+  const lastLoadRef = useRef(0);
+
+  const loadPortfolio = async (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastLoadRef.current < 30_000) return; // respect cache
+    setPLoading(true);
+    setPErr('');
     try {
-      const res = await api.get('/dashboard');
-      setData(res.data || {});
+      const res = await api.get(`/portfolio${force ? '?force=1' : ''}`);
+      setPortfolio(res.data || []);
+      lastLoadRef.current = Date.now();
     } catch (e) {
       console.error(e);
-      setError(e.response?.data?.error || 'Failed to load dashboard');
-      setData({});
+      setPErr('Failed to load portfolio');
+    } finally {
+      setPLoading(false);
     }
-  }, []);
+  };
 
-  const loadPortfolio = useCallback(async () => {
-    try {
-      const res = await api.get('/portfolio');
-      setPortfolio(res.data || []);
-    } catch (e) {
-      console.error('Failed to load portfolio', e);
-    }
-  }, []);
-
-  useEffect(() => { loadDashboard(); }, [loadDashboard]);
-  useEffect(() => { if (tab === 'portfolio') loadPortfolio(); }, [tab, loadPortfolio]);
+  useEffect(() => {
+    if (tab === 'portfolio') loadPortfolio(false);
+  }, [tab]);
 
   if (!data && !error) {
     return (
@@ -84,67 +110,80 @@ const Dashboard = () => {
     );
   }
 
-  const safeTier = data?.tier ?? 'unranked';
-  const volume = Number(data?.volume || 0);
-
   return (
-    <div className="dashboard" style={{ padding: 24, maxWidth: 980, margin: '0 auto' }}>
-      <h1 style={{ textAlign:'center', marginBottom: 12 }}>VolT Dashboard</h1>
-      {error && <p style={{ color:'salmon' }}>{error}</p>}
+    <div className="dashboard" style={{ padding: 24 }}>
+      <h1 style={{ textAlign: 'center' }}>VolT Dashboard</h1>
+      {error && <p style={{ color:'salmon', textAlign:'center' }}>{error}</p>}
 
-      <div style={{ display:'flex', justifyContent:'center', marginBottom: 16 }}>
-        <TabButton active={tab==='overview'} onClick={() => setTab('overview')}>Overview</TabButton>
-        <TabButton active={tab==='wallets'} onClick={() => setTab('wallets')}>Wallets</TabButton>
-        <TabButton active={tab==='portfolio'} onClick={() => { setTab('portfolio'); loadPortfolio(); }}>Portfolio</TabButton>
-        <TabButton active={tab==='referrals'} onClick={() => setTab('referrals')}>Referrals</TabButton>
-      </div>
+      <Tabs tab={tab} setTab={setTab} />
 
-      {tab === 'overview' && (
-        <>
-          <Tier tier={safeTier} />
-          <Progress volume={volume} />
-          <BotControls running={Boolean(data?.running)} />
-        </>
+      {tab === 'volume' && (
+        <BotControls running={Boolean(data?.running)} />
       )}
 
       {tab === 'wallets' && (
-        <WalletManager
-          numWallets={data?.subWallets ?? 0}
-          onChanged={async () => {
-            await loadDashboard();
-            if (tab === 'portfolio') await loadPortfolio();
-          }}
-        />
-      )}
-
-      {tab === 'portfolio' && (
-        <div>
-          <h3 style={{ marginBottom: 12 }}>Holdings by Wallet</h3>
-          {portfolio.length === 0 && <p>No SPL token holdings detected.</p>}
-          {portfolio.map((row) => (
-            <div key={row.wallet} style={{ border:'1px solid #7B68EE', borderRadius:8, padding:12, marginBottom:12 }}>
-              <div style={{ fontFamily:'monospace', fontSize:13, marginBottom:6 }}>{row.wallet}</div>
-              {row.holdings.length === 0 ? (
-                <div style={{ fontSize:12, opacity:0.8 }}>No tokens.</div>
-              ) : (
-                <ul style={{ margin:0, paddingLeft:18 }}>
-                  {row.holdings.map((h, idx) => (
-                    <li key={idx} style={{ fontSize:14 }}>
-                      {h.mint} — <strong>{h.uiAmount}</strong> (decimals {h.decimals})
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
+        <div style={{ display: 'grid', gap: 12 }}>
+          <WalletManager />
         </div>
       )}
 
-      {tab === 'referrals' && (
-        <Referral
-          code={data?.referralCode ?? ''}
-          rewards={data?.earnedRewards ?? 0}
-        />
+      {tab === 'portfolio' && (
+        <Card>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ margin: 0 }}>Portfolio</h2>
+            <button onClick={() => loadPortfolio(true)}>Refresh</button>
+          </div>
+          {pLoading ? (
+            <div style={{ padding: 10, opacity: 0.8 }}>Loading…</div>
+          ) : pErr ? (
+            <div style={{ padding: 10, color: 'salmon' }}>{pErr}</div>
+          ) : !portfolio || portfolio.length === 0 ? (
+            <div style={{ padding: 10, opacity: 0.8 }}>No holdings found.</div>
+          ) : (
+            <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+              {portfolio.map((w) => (
+                <div key={w.wallet} style={{
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(230,230,250,0.18)'
+                }}>
+                  <div style={{ fontFamily: 'monospace', fontSize: 13, marginBottom: 6 }}>{w.wallet}</div>
+                  {!w.holdings || w.holdings.length === 0 ? (
+                    <div style={{ fontSize: 13, opacity: 0.8 }}>No token balances.</div>
+                  ) : (
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      {w.holdings.map((h, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                          <span style={{ opacity: 0.9 }}>{h.mint}</span>
+                          <span style={{ opacity: 0.9 }}>{h.uiAmount}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {tab === 'rewards' && (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <Card>
+            <Tier tier={safeTier} />
+            <div style={{ fontSize: 13, opacity: 0.8, marginTop: -6 }}>
+              Your discount is based on your tier.
+            </div>
+          </Card>
+          <Card>
+            <Referral code={data?.referralCode ?? ''} rewards={data?.earnedRewards ?? 0} />
+          </Card>
+        </div>
+      )}
+
+      {tab === 'activity' && (
+        <Activity />
       )}
     </div>
   );

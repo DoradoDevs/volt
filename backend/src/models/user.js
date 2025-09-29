@@ -1,40 +1,39 @@
+// backend/src/models/user.js
 const mongoose = require('mongoose');
 
-const referralEarningSchema = new mongoose.Schema({
-  userId: { type: String, required: true },   // referee user id
-  lamports: { type: Number, default: 0 }      // total earned from this user
-}, { _id: false });
+const userSchema = new mongoose.Schema(
+  {
+    email: { type: String, required: true, unique: true, index: true },
 
-const userSchema = new mongoose.Schema({
-  // identity
-  email: { type: String, required: true, unique: true, index: true },
-  verified: { type: Boolean, default: false },
+    // auth
+    verificationCode: { type: String },
+    verificationCodeExpires: { type: Date },
+    verified: { type: Boolean, default: false },
 
-  // verification
-  verificationCode: { type: String },
-  verificationCodeExpires: { type: Date },
+    // referrals & tiers
+    referralCode: { type: String, required: true },
+    referrer: { type: String, default: null }, // userId of referrer
+    earnedRewards: { type: Number, default: 0 }, // lamports
+    tier: { type: String, default: 'unranked' }, // unranked/bronze/silver/gold/diamond
+    volume: { type: Number, default: 0 }, // cumulative SOL (float)
 
-  // referral/tier/volume
-  tier: { type: String, default: 'unranked' }, // unranked|bronze|silver|gold|diamond
-  volume: { type: Number, default: 0 },        // in SOL
-  referralCode: { type: String, required: true },
-  referrer: { type: String, default: null },
-  earnedRewards: { type: Number, default: 0 }, // lamports
-  referralEarnings: { type: [referralEarningSchema], default: [] }, // NEW
+    // wallets
+    sourceEncrypted: { type: String, default: null }, // deposit wallet (NEVER used by bot)
+    subWalletsEncrypted: { type: [String], default: [] }, // encrypted bs58 secret keys
+    activeWallets: { type: [String], default: [] }, // list of ADDRESSES (sub wallets only)
 
-  // wallets + settings
-  sourceEncrypted: { type: String, default: null },     // primary deposit wallet (encrypted)
-  subWalletsEncrypted: { type: [String], default: [] }, // encrypted sub-wallets
-  activeWallets: { type: [String], default: [] },       // list of ADDRESSES the bot should use
-  rpc: { type: String, default: null },
-  tokenMint: { type: String, default: '' },
-  minBuy: { type: Number, default: 0 },
-  maxBuy: { type: Number, default: 0 },
-  minDelay: { type: Number, default: 0 },
-  maxDelay: { type: Number, default: 0 },
-  mode: { type: String, default: 'pure' },
+    // bot settings
+    tokenMint: { type: String, default: '' },
+    rpc: { type: String, default: '' }, // fallback to SOLANA_RPC when blank
+    minBuy: { type: Number, default: 0 },
+    maxBuy: { type: Number, default: 0 },
+    minDelay: { type: Number, default: 0 },
+    maxDelay: { type: Number, default: 0 },
+    mode: { type: String, default: 'pure' },
+    running: { type: Boolean, default: false },
 
-  running: { type: Boolean, default: false },
-}, { timestamps: true });
+  },
+  { timestamps: true }
+);
 
 module.exports = mongoose.model('User', userSchema);

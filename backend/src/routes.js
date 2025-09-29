@@ -1,7 +1,6 @@
 // backend/src/routes.js
 const express = require('express');
 
-// Paths match your tree: src/middleware/*.js, src/controllers/*.js
 const { authLimiter } = require('./middleware/ratelimit');
 const authRequired = require('./middleware/auth');
 
@@ -17,12 +16,12 @@ const {
   getTier,
   // wallets
   listWallets,
-  manageWallets,          // legacy bulk add/remove
-  addOneWallet,           // add a single sub-wallet
-  removeWalletByAddress,  // remove one sub-wallet by address
-  getDepositAddress,      // ensure + return deposit address
-  newDepositAddress,      // rotate deposit address
-  setActiveWallets,       // choose wallets for bot (sub-wallets only)
+  manageWallets,
+  addOneWallet,
+  removeWalletByAddress,
+  getDepositAddress,
+  newDepositAddress,
+  setActiveWallets,
   // funds
   depositWithdraw,
   distribute,
@@ -36,6 +35,9 @@ const {
   getSettings,
   // portfolio
   portfolio,
+  // activity + health
+  getActivity,
+  health,
 } = require('./controllers/dashboard');
 
 const router = express.Router();
@@ -56,7 +58,6 @@ router.post('/wallets/remove-one', authRequired, removeWalletByAddress);
 router.get('/wallets/deposit-address', authRequired, getDepositAddress);
 router.post('/wallets/deposit-new', authRequired, newDepositAddress);
 router.post('/wallets/active', authRequired, setActiveWallets);
-
 router.get('/portfolio', authRequired, portfolio);
 
 /** ---------- Referrals ---------- **/
@@ -64,7 +65,7 @@ router.post('/referral/claim', authRequired, manageReferral);
 router.get('/tier', authRequired, getTier);
 
 /** ---------- Wallet admin + funds ---------- **/
-router.post('/wallets/manage', authRequired, manageWallets); // legacy bulk add/remove
+router.post('/wallets/manage', authRequired, manageWallets);
 router.post('/funds/deposit-withdraw', authRequired, depositWithdraw);
 router.post('/funds/distribute', authRequired, distribute);
 router.post('/funds/consolidate', authRequired, consolidate);
@@ -76,5 +77,9 @@ router.post('/bot/start', authRequired, startBotController);
 router.post('/bot/stop', authRequired, stopBotController);
 router.post('/settings/update', authRequired, updateSettings);
 router.get('/settings/get', authRequired, getSettings);
+
+/** ---------- Activity + health ---------- **/
+router.get('/activity', authRequired, getActivity);
+router.get('/health', health);
 
 module.exports = router;
