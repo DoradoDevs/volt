@@ -1,9 +1,9 @@
-﻿const { performSwap, getKeypair } = require('./solana');
+const { performSwap, getKeypair } = require('./solana');
 const User = require('../models/user');
 const TxLog = require('../models/txlog');
 const web3 = require('@solana/web3.js');
 
-const SOL_MINT = web3.NATIVE_MINT.toBase58();
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 const runningBots = new Map(); // userId (string) -> { stop: boolean }
@@ -64,7 +64,7 @@ async function trySwap({ user, walletKeypair, inputMint, outputMint, uiAmount, m
     }
   }
   if (lastError) {
-    console.error([bot ] swap failed:, lastError?.message || lastError);
+    console.error(`[bot ${user._id}] swap failed:`, lastError?.message || lastError);
   }
   return null;
 }
@@ -78,7 +78,7 @@ async function botLoop(userId) {
     try {
       user = await User.findById(userId);
     } catch (err) {
-      console.warn([bot ] failed to load user:, err?.message || err);
+      console.warn(`[bot ${userId}] failed to load user:`, err?.message || err);
       await sleep(1500);
       continue;
     }
@@ -261,7 +261,7 @@ async function botLoop(userId) {
           await sleep(2000);
       }
     } catch (err) {
-      console.error([bot ] loop error:, err?.message || err);
+      console.error(`[bot ${userId}] loop error:`, err?.message || err);
     }
 
     for (let i = 0; i < 20; i += 1) {
@@ -300,3 +300,4 @@ const stopBot = async (userId) => {
 };
 
 module.exports = { startBot, stopBot, runningBots };
+

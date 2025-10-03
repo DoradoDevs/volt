@@ -13,7 +13,7 @@ const { startBot, stopBot } = require('../services/bot');
 
 const TOKEN_PROGRAM_ID = new web3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 
-const SOL_MINT = web3.NATIVE_MINT.toBase58();
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 /* ----------------------------- Helpers ----------------------------- */
@@ -340,20 +340,43 @@ const listWallets = async (req, res) => {
   const connection = new web3.Connection(user.rpc || process.env.SOLANA_RPC);
 
   const wallets = [];
-  try {
-    if (user.sourceEncrypted) {
+
+  if (user.sourceEncrypted) {
+    try {
       const kp = getKeypair(user.sourceEncrypted);
-      const bal = await withRetry(() => connection.getBalance(kp.publicKey));
-      wallets.push({ type: 'source', address: kp.publicKey.toString(), balanceSOL: (bal / web3.LAMPORTS_PER_SOL).toFixed(6) });
+      let lamports = 0;
+      try {
+        lamports = await withRetry(() => connection.getBalance(kp.publicKey));
+      } catch (err) {
+        console.warn('wallet list: deposit balance failed', err?.message || err);
+      }
+      wallets.push({
+        type: 'source',
+        address: kp.publicKey.toString(),
+        balanceSOL: (lamports / web3.LAMPORTS_PER_SOL).toFixed(6),
+      });
+    } catch (err) {
+      console.warn('wallet list: deposit decode failed', err?.message || err);
     }
-  } catch (_) {}
+  }
 
   for (const enc of user.subWalletsEncrypted) {
     try {
       const kp = getKeypair(enc);
-      const bal = await withRetry(() => connection.getBalance(kp.publicKey));
-      wallets.push({ type: 'sub', address: kp.publicKey.toString(), balanceSOL: (bal / web3.LAMPORTS_PER_SOL).toFixed(6) });
-    } catch (_) {}
+      let lamports = 0;
+      try {
+        lamports = await withRetry(() => connection.getBalance(kp.publicKey));
+      } catch (err) {
+        console.warn('wallet list: sub balance failed', err?.message || err);
+      }
+      wallets.push({
+        type: 'sub',
+        address: kp.publicKey.toString(),
+        balanceSOL: (lamports / web3.LAMPORTS_PER_SOL).toFixed(6),
+      });
+    } catch (err) {
+      console.warn('wallet list: sub decode failed', err?.message || err);
+    }
   }
 
   res.json({ wallets, active: user.activeWallets || [] });
@@ -848,3 +871,4 @@ module.exports = {
   // activity + health
   getActivity, health,
 };
+

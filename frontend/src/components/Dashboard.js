@@ -1,4 +1,4 @@
-﻿// frontend/src/components/Dashboard.js
+// frontend/src/components/Dashboard.js
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../services/api';
 import WalletManager from './WalletManager';
@@ -11,8 +11,8 @@ import Activity from './Activity';
 const Tabs = ({ tab, setTab }) => {
   const tabs = [
     { id: 'volume', label: 'Volume Panel' },
-    { id: 'wallets', label: 'Wallets & Funds' },
-    { id: 'portfolio', label: 'Portfolio' },
+    { id: 'funds', label: 'Funds' },
+    { id: 'wallets', label: 'Wallets' },
     { id: 'rewards', label: 'Rewards' },
     { id: 'activity', label: 'Activity' },
   ];
@@ -112,21 +112,6 @@ const Dashboard = () => {
     fetchInfo();
   }, []);
 
-  const [health, setHealth] = useState(null);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await api.get('/health');
-        if (!cancelled) setHealth(res.data || null);
-      } catch (e) {
-        if (!cancelled) setHealth(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const [portfolio, setPortfolio] = useState([]);
   const [pLoading, setPLoading] = useState(false);
@@ -151,7 +136,7 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    if (tab === 'portfolio') loadPortfolio(false);
+    if (tab === 'wallets') loadPortfolio(false);
   }, [tab]);
 
   const portfolioSummary = useMemo(() => {
@@ -180,7 +165,7 @@ const Dashboard = () => {
   const handleWalletsChanged = () => {
     refreshWallets();
     fetchInfo();
-    if (tab === 'portfolio') loadPortfolio(true);
+    if (tab === 'wallets') loadPortfolio(true);
   };
 
   const handleFundsChanged = () => {
@@ -196,7 +181,8 @@ const Dashboard = () => {
   if (loadingInfo) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', color: '#E6E6FA' }}>
-        <p>Loading your dashboard…</p>
+        <p>Loading your dashboard
+</p>
       </div>
     );
   }
@@ -208,11 +194,6 @@ const Dashboard = () => {
       </div>
     );
   }
-
-  const readiness = {
-    ok: Boolean(info.botReady),
-    issues: Array.isArray(info.botIssues) ? info.botIssues : [],
-  };
 
   return (
     <div className="dashboard" style={{ padding: 24 }}>
@@ -245,137 +226,37 @@ const Dashboard = () => {
                 <div style={{ fontSize: 18, fontWeight: 600 }}>{Number(info.sourceBalance || 0).toFixed(4)}</div>
               </div>
             </div>
-            <div style={{ marginTop: 12 }}>
-              <StatusPill ok={readiness.ok} label={readiness.ok ? 'Ready to trade' : 'Action required'} />
-              {!readiness.ok && readiness.issues.length > 0 && (
-                <ul style={{ marginTop: 10, paddingLeft: 18, color: '#ffb4c0', fontSize: 13 }}>
-                  {readiness.issues.map((issue, idx) => (
-                    <li key={idx}>{issue}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
           </Card>
 
-          {health && (
-            <Card>
-              <h2 style={{ margin: 0, marginBottom: 10 }}>System Health</h2>
-              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                <StatusPill ok={Boolean(health.mongo)} label={health.mongo ? 'MongoDB healthy' : 'MongoDB issue'} />
-                <StatusPill ok={Boolean(health.rpc)} label={health.rpc ? 'RPC reachable' : 'RPC issue'} />
-                <StatusPill ok={Boolean(health.env?.EMAIL_USER && health.env?.EMAIL_PASS)} label='Email credentials' />
-              </div>
-            </Card>
-          )}
 
           <BotControls running={Boolean(info.running)} onStatusChange={handleBotStatusChange} />
         </div>
       )}
 
-      {tab === 'wallets' && (
+      {tab === 'funds' && (
         <div style={{ display: 'grid', gap: 16 }}>
           <FundsManager
             sourceAddress={info.sourceAddress || ''}
             balance={info.sourceBalance || 0}
             onChanged={handleFundsChanged}
           />
-          <WalletManager
-            numWallets={info.subWallets || 0}
-            refreshToken={walletRefreshKey}
-            onChanged={handleWalletsChanged}
-          />
         </div>
       )}
 
-      {tab === 'portfolio' && (
+      {tab === 'wallets' && (
         <div style={{ display: 'grid', gap: 16 }}>
-          <Card>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ margin: 0 }}>Portfolio Overview</h2>
-              <button onClick={() => loadPortfolio(true)}>Refresh</button>
-            </div>
-            {pLoading ? (
-              <div style={{ padding: 12, opacity: 0.8 }}>Loading…</div>
-            ) : pErr ? (
-              <div style={{ padding: 12, color: 'salmon' }}>{pErr}</div>
-            ) : (
-              <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                  <Card style={{ flex: '1 1 180px', background: 'rgba(123,104,238,0.12)' }}>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>Total SOL</div>
-                    <div style={{ fontSize: 24, fontWeight: 700 }}>{portfolioSummary.totalSol.toFixed(4)}</div>
-                  </Card>
-                  <Card style={{ flex: '1 1 180px', background: 'rgba(255,255,255,0.05)' }}>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>Wallets Tracked</div>
-                    <div style={{ fontSize: 24, fontWeight: 700 }}>{portfolio.length}</div>
-                  </Card>
-                </div>
-
-                {portfolioSummary.tokens.length ? (
-                  <div>
-                    <h3 style={{ margin: '12px 0 8px' }}>Top Token Holdings</h3>
-                    <div style={{ display: 'grid', gap: 8 }}>
-                      {portfolioSummary.tokens.slice(0, 6).map((token, idx, arr) => {
-                        const max = arr[0]?.amount || 1;
-                        const width = Math.max(4, Math.min(100, (token.amount / max) * 100));
-                        return (
-                          <div key={token.mint}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
-                              <span style={{ fontFamily: 'monospace' }}>{token.mint}</span>
-                              <span>{token.amount.toFixed(4)}</span>
-                            </div>
-                            <div style={{ height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.08)' }}>
-                              <div
-                                style={{
-                                  width: `${width}%`,
-                                  height: '100%',
-                                  borderRadius: 999,
-                                  background: 'linear-gradient(90deg, #7B68EE, #FF8AD6)',
-                                }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 13, opacity: 0.8 }}>No token balances detected across wallets.</div>
-                )}
-
-                <div style={{ display: 'grid', gap: 10 }}>
-                  {portfolio.map((wallet) => (
-                    <div
-                      key={wallet.wallet}
-                      style={{
-                        padding: '10px 12px',
-                        borderRadius: 10,
-                        background: 'rgba(255,255,255,0.04)',
-                        border: '1px solid rgba(230,230,250,0.18)',
-                        display: 'grid',
-                        gap: 8,
-                      }}
-                    >
-                      <div style={{ fontFamily: 'monospace', fontSize: 13 }}>{wallet.wallet}</div>
-                      <div style={{ fontSize: 13, opacity: 0.8 }}>SOL: {(wallet.solBalance || 0).toFixed(4)}</div>
-                      {!wallet.holdings || wallet.holdings.length === 0 ? (
-                        <div style={{ fontSize: 13, opacity: 0.6 }}>No token balances.</div>
-                      ) : (
-                        <div style={{ display: 'grid', gap: 4 }}>
-                          {wallet.holdings.map((h, idx) => (
-                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                              <span>{h.mint}</span>
-                              <span>{Number(h.uiAmount || 0).toFixed(4)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </Card>
+          <WalletManager
+            numWallets={info.subWallets || 0}
+            activeCount={info.activeWallets || 0}
+            refreshToken={walletRefreshKey}
+            onChanged={handleWalletsChanged}
+            portfolioData={portfolio}
+            portfolioSummary={portfolioSummary}
+            portfolioLoading={pLoading}
+            portfolioError={pErr}
+            onRefreshPortfolio={loadPortfolio}
+            sourceAddress={info.sourceAddress || ''}
+          />
         </div>
       )}
 

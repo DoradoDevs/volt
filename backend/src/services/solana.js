@@ -1,4 +1,4 @@
-﻿const web3 = require('@solana/web3.js');
+const web3 = require('@solana/web3.js');
 const { Jupiter } = require('@jup-ag/api');
 const CryptoJS = require('crypto-js');
 const bs58 = require('bs58');
@@ -6,7 +6,7 @@ const bs58 = require('bs58');
 const User = require('../models/user');
 const TxLog = require('../models/txlog');
 
-const SOL_MINT = web3.NATIVE_MINT.toBase58();
+const SOL_MINT = "So11111111111111111111111111111111111111112";
 
 let FEE_WALLET;
 let REWARDS_WALLET;
