@@ -1,12 +1,17 @@
 const { performSwap, getKeypair } = require('./solana');
 const User = require('../models/user');
 const TxLog = require('../models/txlog');
-const web3 = require('@solana/web3.js');
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-const runningBots = new Map(); // userId (string) -> { stop: boolean }
+const runningBots = new Map(); // userId -> controller state
+
+const heartbeat = (controller, patch = {}) => {
+  if (!controller) return;
+  controller.lastHeartbeat = Date.now();
+  Object.assign(controller, patch);
+};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const parseNumber = (value, fallback = 0) => {
@@ -49,17 +54,50 @@ const logSwapError = async (userId, wallet, context, err, uiAmount) => {
   });
 };
 
-async function trySwap({ user, walletKeypair, inputMint, outputMint, uiAmount, mode, action }) {
+async function trySwap({ user, walletKeypair, inputMint, outputMint, uiAmount, mode, action, controller }) {
   const context = { inputMint, outputMint, mode, action };
+  const ctl = controller || runningBots.get(user._id.toString());
   let lastError;
+  const walletAddress = walletKeypair.publicKey.toBase58();
+
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (ctl?.stop) break;
     try {
-      return await performSwap(user, walletKeypair, inputMint, outputMint, uiAmount, 0.5, context);
+      const result = await performSwap(user, walletKeypair, inputMint, outputMint, uiAmount, 0.5, context);
+      if (ctl) {
+        ctl.lastAction = {
+          ts: Date.now(),
+          wallet: walletAddress,
+          mode,
+          action,
+          inputMint,
+          outputMint,
+          amount: Number(uiAmount) || 0,
+          success: true,
+          attempt,
+        };
+      }
+      return result;
     } catch (err) {
       lastError = err;
-      await logSwapError(user._id, walletKeypair.publicKey.toBase58(), context, err, uiAmount);
+      if (ctl) {
+        const payload = {
+          ts: Date.now(),
+          wallet: walletAddress,
+          mode,
+          action,
+          inputMint,
+          outputMint,
+          amount: Number(uiAmount) || 0,
+          success: false,
+          attempt,
+          error: err?.message || String(err),
+        };
+        ctl.lastAction = payload;
+        ctl.lastError = payload;
+      }
+      await logSwapError(user._id, walletAddress, context, err, uiAmount);
       await sleep(400 * Math.pow(2, attempt));
-      const ctl = runningBots.get(user._id.toString());
       if (!ctl || ctl.stop) break;
     }
   }
@@ -69,30 +107,49 @@ async function trySwap({ user, walletKeypair, inputMint, outputMint, uiAmount, m
   return null;
 }
 
-async function botLoop(userId) {
+async function botLoop(userId, controller) {
+  console.log(`[bot ${userId}] loop entered`);
   while (true) {
-    const ctl = runningBots.get(userId);
-    if (!ctl || ctl.stop) return;
+    if (runningBots.get(userId) !== controller) {
+      console.log(`[bot ${userId}] controller handle swapped, exiting`);
+      return;
+    }
+    if (!controller || controller.stop) {
+      console.log(`[bot ${userId}] stop flag detected`);
+      return;
+    }
+
+    heartbeat(controller, { phase: 'load-user' });
 
     let user;
     try {
       user = await User.findById(userId);
     } catch (err) {
       console.warn(`[bot ${userId}] failed to load user:`, err?.message || err);
+      heartbeat(controller, { lastError: { ts: Date.now(), message: err?.message || String(err) } });
       await sleep(1500);
       continue;
     }
 
-    if (!user || !user.running) return;
+    if (!user || !user.running) {
+      console.log(`[bot ${userId}] user record missing or running flag cleared`);
+      return;
+    }
 
     const tokenMint = (user.tokenMint || '').trim();
     if (!BASE58_RE.test(tokenMint)) {
+      console.warn(`[bot ${userId}] invalid token mint`, tokenMint);
+      heartbeat(controller, { lastError: { ts: Date.now(), message: 'Invalid token mint', tokenMint } });
       await sleep(3000);
       continue;
     }
 
     const wallets = getActiveKeypairs(user);
+    const mode = (user.mode || 'pure').toLowerCase();
+    heartbeat(controller, { phase: 'active', mode, walletCount: wallets.length });
+
     if (!wallets.length) {
+      console.log(`[bot ${userId}] no active wallets`);
       await sleep(2500);
       continue;
     }
@@ -105,13 +162,11 @@ async function botLoop(userId) {
     const randomAmount = () => Math.max(minBuy, Math.random() * (maxBuy - minBuy) + minBuy);
     const randomDelay = () => Math.random() * (maxDelay - minDelay) + minDelay;
 
-    const mode = (user.mode || 'pure').toLowerCase();
-
     try {
       switch (mode) {
         case 'pure':
           for (const wallet of wallets) {
-            if (runningBots.get(userId)?.stop) return;
+            if (controller.stop) return;
             const buy = await trySwap({
               user,
               walletKeypair: wallet,
@@ -120,9 +175,12 @@ async function botLoop(userId) {
               uiAmount: randomAmount(),
               mode: 'pure',
               action: 'bot-buy',
+              controller,
             });
+            if (controller.stop) return;
             if (buy && buy.output.uiAmount > 0) {
               await sleep(randomDelay());
+              if (controller.stop) return;
               await trySwap({
                 user,
                 walletKeypair: wallet,
@@ -131,15 +189,17 @@ async function botLoop(userId) {
                 uiAmount: buy.output.uiAmount,
                 mode: 'pure',
                 action: 'bot-sell',
+                controller,
               });
             }
             await sleep(randomDelay());
+            if (controller.stop) return;
           }
           break;
 
         case 'growth':
           for (const wallet of wallets) {
-            if (runningBots.get(userId)?.stop) return;
+            if (controller.stop) return;
             const buy = await trySwap({
               user,
               walletKeypair: wallet,
@@ -148,11 +208,14 @@ async function botLoop(userId) {
               uiAmount: randomAmount(),
               mode: 'growth',
               action: 'bot-buy',
+              controller,
             });
+            if (controller.stop) return;
             if (buy && buy.output.uiAmount > 0) {
               const sellAmount = buy.output.uiAmount * 0.9;
               if (sellAmount > 0) {
                 await sleep(randomDelay());
+                if (controller.stop) return;
                 await trySwap({
                   user,
                   walletKeypair: wallet,
@@ -161,16 +224,18 @@ async function botLoop(userId) {
                   uiAmount: sellAmount,
                   mode: 'growth',
                   action: 'bot-sell',
+                  controller,
                 });
               }
             }
             await sleep(randomDelay());
+            if (controller.stop) return;
           }
           break;
 
         case 'moonshot':
           for (const wallet of wallets) {
-            if (runningBots.get(userId)?.stop) return;
+            if (controller.stop) return;
             await trySwap({
               user,
               walletKeypair: wallet,
@@ -179,7 +244,9 @@ async function botLoop(userId) {
               uiAmount: randomAmount(),
               mode: 'moonshot',
               action: 'bot-buy',
+              controller,
             });
+            if (controller.stop) return;
             await sleep(randomDelay());
           }
           break;
@@ -190,12 +257,15 @@ async function botLoop(userId) {
             break;
           }
           const shuffled = [...wallets].sort(() => Math.random() - 0.5);
-          const groupSize = Math.min(shuffled.length, Math.max(2, Math.floor(Math.random() * Math.min(5, shuffled.length)) + 1));
+          const groupSize = Math.min(
+            shuffled.length,
+            Math.max(2, Math.floor(Math.random() * Math.min(5, shuffled.length)) + 1),
+          );
           const group = shuffled.slice(0, groupSize);
           const sells = [];
 
           for (const wallet of group) {
-            if (runningBots.get(userId)?.stop) return;
+            if (controller.stop) return;
             const buy = await trySwap({
               user,
               walletKeypair: wallet,
@@ -204,17 +274,21 @@ async function botLoop(userId) {
               uiAmount: randomAmount(),
               mode: 'human',
               action: 'bot-buy',
+              controller,
             });
+            if (controller.stop) return;
             if (buy && buy.output.uiAmount > 0) {
               sells.push({ wallet, amount: buy.output.uiAmount });
             }
             await sleep(Math.random() * 5000);
+            if (controller.stop) return;
           }
 
           await sleep(15000 + Math.random() * 15000);
+          if (controller.stop) return;
 
           for (const sell of sells) {
-            if (runningBots.get(userId)?.stop) return;
+            if (controller.stop) return;
             await trySwap({
               user,
               walletKeypair: sell.wallet,
@@ -223,6 +297,7 @@ async function botLoop(userId) {
               uiAmount: sell.amount,
               mode: 'human',
               action: 'bot-sell',
+              controller,
             });
           }
           break;
@@ -230,7 +305,7 @@ async function botLoop(userId) {
 
         case 'bump':
           for (const wallet of wallets) {
-            if (runningBots.get(userId)?.stop) return;
+            if (controller.stop) return;
             const amount = randomAmount();
             const buy = await trySwap({
               user,
@@ -240,9 +315,12 @@ async function botLoop(userId) {
               uiAmount: amount,
               mode: 'bump',
               action: 'bot-buy',
+              controller,
             });
+            if (controller.stop) return;
             if (buy && buy.output.uiAmount > 0) {
               await sleep(randomDelay());
+              if (controller.stop) return;
               await trySwap({
                 user,
                 walletKeypair: wallet,
@@ -251,9 +329,11 @@ async function botLoop(userId) {
                 uiAmount: buy.output.uiAmount,
                 mode: 'bump',
                 action: 'bot-sell',
+                controller,
               });
             }
             await sleep(randomDelay());
+            if (controller.stop) return;
           }
           break;
 
@@ -262,41 +342,84 @@ async function botLoop(userId) {
       }
     } catch (err) {
       console.error(`[bot ${userId}] loop error:`, err?.message || err);
+      heartbeat(controller, { lastError: { ts: Date.now(), message: err?.message || String(err) } });
     }
 
+    heartbeat(controller, { phase: 'cooldown' });
     for (let i = 0; i < 20; i += 1) {
-      const ctlCheck = runningBots.get(userId);
-      if (!ctlCheck || ctlCheck.stop) return;
+      if (!controller || controller.stop) return;
       await sleep(1000);
     }
   }
 }
 
+
 const startBot = async (userId) => {
   const id = userId.toString();
   const user = await User.findById(id);
-  if (!user || user.running) return;
+  if (!user) throw new Error('User not found');
 
-  user.running = true;
-  await user.save();
+  let controller = runningBots.get(id);
+  let status = 'started';
 
-  if (runningBots.has(id)) {
-    runningBots.get(id).stop = false;
-    return;
+  if (!user.running) {
+    user.running = true;
+    await user.save();
+  } else {
+    await User.updateOne({ _id: id }, { $set: { running: true } }).catch(() => {});
   }
 
-  runningBots.set(id, { stop: false });
-  botLoop(id).finally(() => {
-    runningBots.delete(id);
-    User.findByIdAndUpdate(id, { running: false }).catch(() => {});
-  });
-};
+  if (controller) {
+    const wasStopping = controller.stop;
+    controller.stop = false;
+    controller.stopRequestedAt = null;
+    controller.startedAt = controller.startedAt || Date.now();
+    heartbeat(controller, { mode: (user.mode || 'pure').toLowerCase() });
+    status = wasStopping ? 'resumed' : 'already-running';
+  } else {
+    controller = {
+      userId: id,
+      stop: false,
+      startedAt: Date.now(),
+      lastHeartbeat: Date.now(),
+      lastAction: null,
+      lastError: null,
+      mode: (user.mode || 'pure').toLowerCase(),
+      walletCount: Array.isArray(user.activeWallets) ? user.activeWallets.length : 0,
+    };
+    runningBots.set(id, controller);
+    console.log(`[bot ${id}] loop starting`);
+    setImmediate(() => {
+      botLoop(id, controller)
+        .catch((err) => {
+          console.error(`[bot ${id}] loop crashed:`, err?.message || err);
+        })
+        .finally(() => {
+          runningBots.delete(id);
+          User.findByIdAndUpdate(id, { running: false }).catch(() => {});
+        });
+    });
+  }
 
+  heartbeat(controller, { phase: 'running' });
+  return { status, controller };
+};
 const stopBot = async (userId) => {
   const id = userId.toString();
-  const ctl = runningBots.get(id);
-  if (ctl) ctl.stop = true;
+  const controller = runningBots.get(id);
+  let status = 'not-running';
+  if (controller) {
+    if (controller.stop) {
+      status = 'already-stopping';
+    } else {
+      controller.stop = true;
+      controller.stopRequestedAt = Date.now();
+      heartbeat(controller, { phase: 'stopping' });
+      status = 'stopping';
+    }
+  }
   await User.findByIdAndUpdate(id, { running: false }).catch(() => {});
+  return { status };
 };
 
 module.exports = { startBot, stopBot, runningBots };

@@ -509,12 +509,16 @@ const BotControls = ({ running, onStatusChange }) => {
         alert(lines.join('\n'));
         return;
       }
-      await api.post('/bot/start');
-      alert('Bot started');
+      const startResp = await api.post('/bot/start');
+      const startMessage = startResp?.data?.message || 'Bot start request accepted';
+      alert(startMessage);
       onStatusChange?.();
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.error || 'Error starting bot');
+      const msg = err?.code === 'ERR_NETWORK'
+        ? 'Unable to reach the backend. Make sure the server is running on http://localhost:5000.'
+        : (err?.response?.data?.error || err?.message || 'Error starting bot');
+      alert(msg);
     } finally {
       setStarting(false);
     }
@@ -523,12 +527,16 @@ const BotControls = ({ running, onStatusChange }) => {
   const handleStop = async () => {
     setStopping(true);
     try {
-      await api.post('/bot/stop');
-      alert('Bot stopped');
+      const resp = await api.post('/bot/stop');
+      const message = resp?.data?.message || 'Stop signal sent';
+      alert(message);
       onStatusChange?.();
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.error || 'Error stopping bot');
+      const msg = err?.code === 'ERR_NETWORK'
+        ? 'Unable to reach the backend. Make sure the server is running on http://localhost:5000.'
+        : (err?.response?.data?.error || err?.message || 'Error stopping bot');
+      alert(msg);
     } finally {
       setStopping(false);
     }

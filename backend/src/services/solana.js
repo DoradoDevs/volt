@@ -1,6 +1,7 @@
 const web3 = require('@solana/web3.js');
-const { Jupiter } = require('@jup-ag/api');
+const { createJupiterApiClient } = require('@jup-ag/api');
 const CryptoJS = require('crypto-js');
+const mongoose = require('mongoose');
 const bs58 = require('bs58');
 
 const User = require('../models/user');
@@ -16,6 +17,7 @@ let DEFAULT_RPC;
 let FEE_RATE;
 let REBATE_ADDRESS;
 let FORCE_REBATE;
+let DEFAULT_PRIORITY_FEE = 0;
 
 const initializeEnvironment = () => {
   if (!process.env.FEE_WALLET) throw new Error('FEE_WALLET not set');
@@ -35,6 +37,9 @@ const initializeEnvironment = () => {
 
   const parsed = Number(process.env.FEE_RATE || 0.001);
   FEE_RATE = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0.001;
+
+  const priorityEnv = Number(process.env.SWAP_PRIORITY_LAMPORTS || process.env.PRIORITY_FEE_LAMPORTS || 0);
+  DEFAULT_PRIORITY_FEE = Number.isFinite(priorityEnv) && priorityEnv > 0 ? Math.floor(priorityEnv) : 0;
 };
 
 const ensureInit = (fn) => (...args) => {
@@ -104,6 +109,67 @@ const getReferralShare = (tier) => REFERRAL_SHARES[(tier || '').toLowerCase()] |
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const isResponseError = (err) => err && err.name === 'ResponseError' && err.response && typeof err.response.text === 'function';
+
+const annotateJupiterError = async (err, label) => {
+  if (!err || err.__jupAnnotated) return err;
+  err.__jupAnnotated = true;
+  const prefix = `[jupiter ${label}]`;
+
+  try {
+    if (isResponseError(err)) {
+      const res = err.response;
+      const status = res.status || res.statusCode || '';
+      const statusText = res.statusText || '';
+      let bodyText = '';
+      try {
+        bodyText = await res.text();
+      } catch (_) {
+        bodyText = '';
+      }
+
+      let detail = bodyText;
+      if (bodyText) {
+        try {
+          const parsed = JSON.parse(bodyText);
+          err.jupiterDetails = parsed;
+          detail = parsed.error || parsed.message || parsed.details || JSON.stringify(parsed);
+        } catch (_) {
+          err.jupiterDetails = bodyText;
+        }
+      }
+
+      err.message = [prefix, status, statusText].filter(Boolean).join(' ').trim();
+      if (detail) err.message = `${err.message}${err.message ? ' - ' : ''}${detail}`;
+    } else if (err?.message) {
+      err.message = `${prefix} ${err.message}`;
+    } else {
+      err.message = `${prefix} Unknown error`;
+    }
+  } catch (parseErr) {
+    console.warn(`${prefix} failed to read error response`, parseErr?.message || parseErr);
+  }
+
+  console.warn(err?.message || prefix);
+  return err;
+};
+
+const callJupiter = async (fn, label, tries = 3, baseDelay = 300) => {
+  let lastErr;
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      await annotateJupiterError(err, `${label} attempt ${attempt + 1}`);
+      if (attempt < tries - 1) {
+        await sleep(baseDelay * Math.pow(2, attempt));
+      }
+    }
+  }
+  throw lastErr;
+};
+
 async function withRetry(fn, tries = 3, base = 250) {
   let lastErr;
   for (let i = 0; i < tries; i += 1) {
@@ -172,14 +238,22 @@ const fromBaseUnits = async (connection, mint, rawAmount) => {
   return raw / 10 ** decimals;
 };
 
-const jupiterCache = new Map();
+let jupiterClient = null;
 
-const getJupiter = async (connection) => {
-  const endpoint = connection.rpcEndpoint || DEFAULT_RPC;
-  if (jupiterCache.has(endpoint)) return jupiterCache.get(endpoint);
-  const instance = await Jupiter.load({ connection });
-  jupiterCache.set(endpoint, instance);
-  return instance;
+const getJupiter = async () => {
+  if (jupiterClient) return jupiterClient;
+
+  const basePath = (process.env.JUPITER_API_BASE || '').trim();
+  const apiKey = (process.env.JUPITER_API_KEY || process.env.JUP_API_KEY || process.env.API_KEY || '').trim();
+  const config = {};
+  if (basePath) config.basePath = basePath;
+  if (apiKey) {
+    config.apiKey = apiKey;
+    config.headers = { 'x-api-key': apiKey };
+  }
+
+  jupiterClient = createJupiterApiClient(config);
+  return jupiterClient;
 };
 
 const computeFeeParts = async (amountSol, user) => {
@@ -200,7 +274,25 @@ const computeFeeParts = async (amountSol, user) => {
   let refUser = null;
 
   if (user.referrer) {
-    refUser = await User.findById(user.referrer);
+    let refId = user.referrer;
+    if (typeof refId === 'object' && refId) {
+      refId = refId._id || refId.id || (typeof refId.toString === 'function' ? refId.toString() : refId);
+    }
+
+    if (typeof refId === 'string') {
+      refId = refId.trim();
+    }
+
+    if (typeof refId === 'string' && mongoose.Types.ObjectId.isValid(refId)) {
+      try {
+        refUser = await User.findById(refId);
+      } catch (err) {
+        console.warn('[fee] failed to load referrer user', err?.message || err);
+      }
+    } else if (refId) {
+      console.warn(`[fee] skipping invalid referrer id for ${user._id}: ${refId}`);
+    }
+
     if (refUser) {
       const share = getReferralShare(refUser.tier);
       feeToRef = Math.min(effectiveLamports, Math.floor(effectiveLamports * share));
@@ -319,28 +411,35 @@ const performSwap = ensureInit(async (user, walletKeypair, inputMint, outputMint
     };
   }
 
-  const jupiter = await getJupiter(connection);
-  const quote = await withRetry(
-    () => jupiter.quote({
-      inputMint: inputKey,
-      outputMint: outputKey,
-      amount: amountRaw,
+  const jupiter = await getJupiter();
+  const quote = await callJupiter(
+    () => jupiter.quoteGet({
+      inputMint: inputKey.toBase58(),
+      outputMint: outputKey.toBase58(),
+      amount: amountRaw.toString(),
       slippageBps: Math.max(1, Math.floor(Number(slippage) * 100)),
     }),
-    3,
-    300
+    'quote',
   );
 
-  const swapResult = await withRetry(
-    () => jupiter.swap({
-      swapRequest: {
-        quoteResponse: quote,
-        userPublicKey: walletKeypair.publicKey,
-        prioritizationFeeLamports: 0,
-      },
-    }),
-    3,
-    300
+  const swapRequest = {
+    quoteResponse: quote,
+    userPublicKey: walletKeypair.publicKey.toBase58(),
+  };
+
+  const usesSol = baseLog.inputMint === SOL_MINT || baseLog.outputMint === SOL_MINT;
+  if (usesSol) swapRequest.wrapAndUnwrapSol = true;
+
+  const priorityCandidate = Number(
+    user.priorityFeeLamports ?? user.priorityFee ?? DEFAULT_PRIORITY_FEE
+  );
+  if (Number.isFinite(priorityCandidate) && priorityCandidate > 0) {
+    swapRequest.prioritizationFeeLamports = Math.floor(priorityCandidate);
+  }
+
+  const swapResult = await callJupiter(
+    () => jupiter.swapPost({ swapRequest }),
+    'swap',
   );
 
   const swapTxBuf = typeof swapResult.swapTransaction === 'string'
@@ -356,10 +455,18 @@ const performSwap = ensureInit(async (user, walletKeypair, inputMint, outputMint
     3,
     500
   );
-  await connection.confirmTransaction(signature, 'confirmed');
 
-  const inputRaw = Number(swapResult.swapResponse?.inputAmount ?? amountRaw);
-  const outputRaw = Number(swapResult.swapResponse?.outputAmount ?? 0);
+  const lastValidBlockHeight = Number(swapResult?.lastValidBlockHeight) || undefined;
+  const recentBlockhash = swapTx.message.recentBlockhash;
+  await connection.confirmTransaction(
+    lastValidBlockHeight
+      ? { signature, blockhash: recentBlockhash, lastValidBlockHeight }
+      : signature,
+    'confirmed',
+  );
+
+  const inputRaw = Number(quote?.inAmount ?? amountRaw);
+  const outputRaw = Number(quote?.outAmount ?? 0);
   const inputUiActual = inputRaw > 0 ? await fromBaseUnits(connection, baseLog.inputMint, inputRaw) : amountUi;
   const outputUiActual = outputRaw > 0 ? await fromBaseUnits(connection, baseLog.outputMint, outputRaw) : 0;
   const volumeSol = computeVolumeSol(baseLog.inputMint, baseLog.outputMint, inputRaw, outputRaw);

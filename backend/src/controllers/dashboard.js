@@ -507,25 +507,26 @@ const distribute = async (req, res) => {
     return res.status(400).json({ error: 'Insufficient balance in source wallet' });
   }
 
-  const tx = new web3.Transaction();
-  subKps.forEach((sub) => {
-    tx.add(web3.SystemProgram.transfer({
+  const instructions = subKps.map((sub) =>
+    web3.SystemProgram.transfer({
       fromPubkey: sourceKp.publicKey,
       toPubkey: sub.publicKey,
-      lamports: perWalletLamports
-    }));
-  });
+      lamports: perWalletLamports,
+    })
+  );
 
-  const v0 = await connection.compileMessageV0({
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+  const messageV0 = new web3.TransactionMessage({
     payerKey: sourceKp.publicKey,
-    instructions: tx.instructions,
-    recentBlockhash: (await connection.getLatestBlockhash()).blockhash,
-  });
-  const vtx = new web3.VersionedTransaction(v0);
+    recentBlockhash: blockhash,
+    instructions,
+  }).compileToV0Message();
+
+  const vtx = new web3.VersionedTransaction(messageV0);
   vtx.sign([sourceKp]);
 
   const sig = await connection.sendRawTransaction(vtx.serialize(), { skipPreflight: true });
-  await connection.confirmTransaction(sig, 'confirmed');
+  await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
 
   let feeTxid = null;
   try {
@@ -716,10 +717,33 @@ const startBotController = async (req, res) => {
     return res.status(400).json({ error: 'Bot configuration incomplete', issues: preflight.issues });
   }
 
-  await startBot(user._id);
-  res.json({ message: 'Bot started' });
+  try {
+    const { status } = await startBot(user._id);
+    const messageMap = {
+      started: 'Bot loop started',
+      resumed: 'Bot resume requested',
+      'already-running': 'Bot already running',
+    };
+    res.json({ message: messageMap[status] || 'Bot start request accepted', status });
+  } catch (err) {
+    console.error(`[bot ${req.userId}] start error:`, err?.message || err);
+    res.status(500).json({ error: 'Failed to start bot', detail: err?.message || String(err) });
+  }
 };
-const stopBotController = async (req, res) => { await stopBot(req.userId); res.json({ message: 'Bot stopped' }); };
+const stopBotController = async (req, res) => {
+  try {
+    const { status } = await stopBot(req.userId);
+    const messageMap = {
+      stopping: 'Stop signal sent',
+      'already-stopping': 'Bot is already stopping',
+      'not-running': 'Bot was not running',
+    };
+    res.json({ message: messageMap[status] || 'Stop request acknowledged', status });
+  } catch (err) {
+    console.error(`[bot ${req.userId}] stop error:`, err?.message || err);
+    res.status(500).json({ error: 'Failed to stop bot', detail: err?.message || String(err) });
+  }
+};
 
 const updateSettings = async (req, res) => {
   const user = await User.findById(req.userId);
