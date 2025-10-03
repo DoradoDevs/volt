@@ -6,12 +6,15 @@ const User = require('../models/user');
 const TxLog = require('../models/txlog');
 
 const {
-  encrypt, getKeypair, getBalance, payOutRewards, addFeeInstructions, performSwap
+  encrypt, getKeypair, getBalance, payOutRewards, collectPlatformFee, performSwap
 } = require('../services/solana');
 
 const { startBot, stopBot } = require('../services/bot');
 
 const TOKEN_PROGRAM_ID = new web3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+
+const SOL_MINT = web3.NATIVE_MINT.toBase58();
+const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 /* ----------------------------- Helpers ----------------------------- */
 
@@ -51,6 +54,71 @@ async function withRetry(fn, { tries = 5, baseDelay = 500 } = {}) {
   }
   throw lastErr;
 }
+
+const toNumber = (value, fallback = 0) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const deriveSubWalletAddresses = (user) => {
+  const addresses = new Set();
+  let decodeError = false;
+  for (const enc of user.subWalletsEncrypted || []) {
+    try {
+      addresses.add(getKeypair(enc).publicKey.toBase58());
+    } catch (err) {
+      decodeError = true;
+    }
+  }
+  return { addresses, decodeError };
+};
+
+const validateBotConfig = (user) => {
+  const issues = [];
+  const tokenMint = (user.tokenMint || '').trim();
+  if (!BASE58_RE.test(tokenMint)) {
+    issues.push('Token mint must be a valid base58 address.');
+  }
+
+  const { addresses: allowed, decodeError } = deriveSubWalletAddresses(user);
+  if (decodeError) {
+    issues.push('Failed to decrypt one or more generated wallets. Regenerate wallets.');
+  }
+
+  const active = Array.isArray(user.activeWallets) ? user.activeWallets.filter(Boolean) : [];
+  if (!active.length) {
+    issues.push('Select at least one active wallet for the bot.');
+  } else {
+    const missing = active.filter((addr) => !allowed.has(addr));
+    if (missing.length) {
+      issues.push('Some active wallets are not recognised. Save wallet selection again.');
+    }
+  }
+
+  const minBuy = toNumber(user.minBuy);
+  const maxBuy = toNumber(user.maxBuy);
+  if (minBuy <= 0) {
+    issues.push('Minimum buy must be greater than 0.');
+  }
+  if (maxBuy <= 0 || maxBuy < minBuy) {
+    issues.push('Maximum buy must be greater than or equal to minimum buy.');
+  }
+
+  const minDelay = toNumber(user.minDelay);
+  const maxDelay = toNumber(user.maxDelay);
+  if (minDelay < 200) {
+    issues.push('Minimum delay must be at least 200 ms.');
+  }
+  if (maxDelay < minDelay) {
+    issues.push('Maximum delay must be greater than or equal to minimum delay.');
+  }
+
+  if (!user.sourceEncrypted) {
+    issues.push('Deposit wallet not initialised yet. Generate a deposit address.');
+  }
+
+  return { ok: issues.length === 0, issues };
+};
 
 // 30s token-holdings cache by wallet address
 const TOK_CACHE_MS = 30_000;
@@ -110,6 +178,8 @@ const getDashboard = async (req, res) => {
     }
   } catch (_) {}
 
+  const preflight = validateBotConfig(user);
+
   res.json({
     email: user.email,
     tier: user.tier,
@@ -118,6 +188,9 @@ const getDashboard = async (req, res) => {
     sourceAddress,
     sourceBalance,
     subWallets: user.subWalletsEncrypted.length,
+    activeWallets: (user.activeWallets || []).length,
+    botReady: preflight.ok,
+    botIssues: preflight.issues,
     running: !!user.running
   });
 };
@@ -146,6 +219,45 @@ const manageReferral = async (req, res) => {
   user.earnedRewards = 0;
   await user.save();
   res.json({ txid });
+};
+
+const listReferrals = async (req, res) => {
+  const user = await User.findById(req.userId);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const referrals = await User.find({ referrer: req.userId })
+    .select('email volume createdAt')
+    .lean();
+
+  const data = referrals.map((ref) => ({
+    userId: ref._id,
+    email: ref.email,
+    volume: Number(ref.volume || 0),
+    since: ref.createdAt,
+  }));
+
+  res.json({ referrals: data });
+};
+
+const setReferrer = async (req, res) => {
+  const rawCode = (req.body?.code || '').trim();
+  if (!rawCode) return res.status(400).json({ error: 'Referral code required' });
+
+  const user = await User.findById(req.userId);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const code = rawCode.toLowerCase();
+  if (user.referralCode.toLowerCase() === code) {
+    return res.status(400).json({ error: 'Cannot use your own code' });
+  }
+
+  const refUser = await User.findOne({ referralCode: code });
+  if (!refUser) return res.status(404).json({ error: 'Referral code not found' });
+
+  user.referrer = refUser._id.toString();
+  await user.save();
+
+  res.json({ ok: true, referrerEmail: refUser.email });
 };
 
 const getTier = async (req, res) => {
@@ -298,7 +410,6 @@ const depositWithdraw = async (req, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
-  // Ensure source exists
   if (!user.sourceEncrypted) {
     const kp = web3.Keypair.generate();
     user.sourceEncrypted = encrypt(bs58.encode(kp.secretKey));
@@ -320,11 +431,12 @@ const depositWithdraw = async (req, res) => {
   amount = Number(amount);
   if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Invalid amount' });
 
+  const lamports = Math.floor(amount * web3.LAMPORTS_PER_SOL);
   const tx = new web3.Transaction().add(
     web3.SystemProgram.transfer({
       fromPubkey: sourceKp.publicKey,
       toPubkey: new web3.PublicKey(destination),
-      lamports: Math.floor(amount * web3.LAMPORTS_PER_SOL)
+      lamports
     })
   );
 
@@ -335,13 +447,18 @@ const depositWithdraw = async (req, res) => {
   });
   const vtx = new web3.VersionedTransaction(v0);
   vtx.sign([sourceKp]);
-  const serialized = vtx.serialize();
 
-  const withFee = await addFeeInstructions(serialized, sourceKp, amount, user, connection);
-  const sig = await connection.sendRawTransaction(withFee, { skipPreflight: true });
+  const sig = await connection.sendRawTransaction(vtx.serialize(), { skipPreflight: true });
   await connection.confirmTransaction(sig, 'confirmed');
 
-  res.json({ txid: sig });
+  let feeTxid = null;
+  try {
+    feeTxid = await collectPlatformFee({ connection, signer: sourceKp, user, amountSol: amount });
+  } catch (feeErr) {
+    console.error('[fees] withdraw fee failed:', feeErr?.message || feeErr);
+  }
+
+  res.json({ txid: sig, feeTxid });
 };
 
 const distribute = async (req, res) => {
@@ -349,18 +466,30 @@ const distribute = async (req, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
+  const perWallet = Number(amountPerWallet);
+  if (!Number.isFinite(perWallet) || perWallet <= 0) {
+    return res.status(400).json({ error: 'Invalid amount per wallet' });
+  }
+
   const sourceKp = getKeypair(user.sourceEncrypted);
   const subKps = user.subWalletsEncrypted.map(getKeypair);
-  const connection = new web3.Connection(user.rpc || process.env.SOLANA_RPC);
-
   if (!subKps.length) return res.status(400).json({ error: 'No sub wallets' });
+
+  const connection = new web3.Connection(user.rpc || process.env.SOLANA_RPC);
+  const perWalletLamports = Math.floor(perWallet * web3.LAMPORTS_PER_SOL);
+  const totalLamports = perWalletLamports * subKps.length;
+
+  const currentBalance = await withRetry(() => connection.getBalance(sourceKp.publicKey));
+  if (currentBalance < totalLamports) {
+    return res.status(400).json({ error: 'Insufficient balance in source wallet' });
+  }
 
   const tx = new web3.Transaction();
   subKps.forEach((sub) => {
     tx.add(web3.SystemProgram.transfer({
       fromPubkey: sourceKp.publicKey,
       toPubkey: sub.publicKey,
-      lamports: Math.floor(amountPerWallet * web3.LAMPORTS_PER_SOL)
+      lamports: perWalletLamports
     }));
   });
 
@@ -371,14 +500,18 @@ const distribute = async (req, res) => {
   });
   const vtx = new web3.VersionedTransaction(v0);
   vtx.sign([sourceKp]);
-  const serialized = vtx.serialize();
 
-  const totalSol = amountPerWallet * subKps.length;
-  const withFee = await addFeeInstructions(serialized, sourceKp, totalSol, user, connection);
-  const sig = await connection.sendRawTransaction(withFee, { skipPreflight: true });
+  const sig = await connection.sendRawTransaction(vtx.serialize(), { skipPreflight: true });
   await connection.confirmTransaction(sig, 'confirmed');
 
-  res.json({ txid: sig });
+  let feeTxid = null;
+  try {
+    feeTxid = await collectPlatformFee({ connection, signer: sourceKp, user, amountSol: perWallet * subKps.length });
+  } catch (feeErr) {
+    console.error('[fees] distribute fee failed:', feeErr?.message || feeErr);
+  }
+
+  res.json({ txid: sig, feeTxid });
 };
 
 const consolidate = async (req, res) => {
@@ -389,44 +522,44 @@ const consolidate = async (req, res) => {
   const subKps = user.subWalletsEncrypted.map(getKeypair);
   const connection = new web3.Connection(user.rpc || process.env.SOLANA_RPC);
 
-  let total = 0;
-  const tx = new web3.Transaction();
+  const txids = [];
+  let totalLamports = 0;
 
   for (const sub of subKps) {
-    const balLamports = await withRetry(() => connection.getBalance(sub.publicKey));
-    if (balLamports > 0) {
-      tx.add(web3.SystemProgram.transfer({
-        fromPubkey: sub.publicKey,
-        toPubkey: sourceKp.publicKey,
-        lamports: balLamports
-      }));
-      total += balLamports / web3.LAMPORTS_PER_SOL;
-    }
+    const balanceLamports = await withRetry(() => connection.getBalance(sub.publicKey));
+    if (balanceLamports <= 0) continue;
+
+    const tx = new web3.Transaction().add(web3.SystemProgram.transfer({
+      fromPubkey: sub.publicKey,
+      toPubkey: sourceKp.publicKey,
+      lamports: balanceLamports
+    }));
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = sub.publicKey;
+    tx.sign(sub);
+
+    const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true });
+    await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
+    txids.push(sig);
+    totalLamports += balanceLamports;
   }
 
-  if (!tx.instructions.length) return res.json({ txid: null, message: 'Nothing to consolidate' });
+  if (!txids.length) {
+    return res.json({ txid: null, txids: [], message: 'Nothing to consolidate' });
+  }
 
-  const v0 = await connection.compileMessageV0({
-    payerKey: sourceKp.publicKey,
-    instructions: tx.instructions,
-    recentBlockhash: (await connection.getLatestBlockhash()).blockhash,
-  });
-  const vtx = new web3.VersionedTransaction(v0);
-  vtx.sign([sourceKp]);
-  const serialized = vtx.serialize();
+  let feeTxid = null;
+  const totalSol = totalLamports / web3.LAMPORTS_PER_SOL;
+  try {
+    feeTxid = await collectPlatformFee({ connection, signer: sourceKp, user, amountSol: totalSol });
+  } catch (feeErr) {
+    console.error('[fees] consolidate fee failed:', feeErr?.message || feeErr);
+  }
 
-  const withFee = await addFeeInstructions(serialized, sourceKp, total, user, connection);
-  const sig = await connection.sendRawTransaction(withFee, { skipPreflight: true });
-  await connection.confirmTransaction(sig, 'confirmed');
-
-  res.json({ txid: sig });
+  res.json({ txid: txids[0], txids, feeTxid, totalSol });
 };
 
-/**
- * Sell all positions of the configured tokenMint across wallets.
- * Default: SUB wallets only. If you really want to include the deposit wallet,
- * call with { includeSource: true } in the POST body.
- */
 const sellAll = async (req, res) => {
   const { includeSource = false } = req.body || {};
   const user = await User.findById(req.userId);
@@ -435,15 +568,14 @@ const sellAll = async (req, res) => {
 
   const connection = new web3.Connection(user.rpc || process.env.SOLANA_RPC);
   const tokenMint = user.tokenMint;
-  const solMint = web3.SystemProgram.programId.toString();
+  const solMint = SOL_MINT;
 
-  // Build wallet list
   const wallets = [];
   if (includeSource && user.sourceEncrypted) {
-    try { wallets.push(getKeypair(user.sourceEncrypted)); } catch (_) {}
+    try { wallets.push(getKeypair(user.sourceEncrypted)); } catch (e) { console.warn('sellAll source decode failed', e?.message || e); }
   }
   for (const enc of user.subWalletsEncrypted) {
-    try { wallets.push(getKeypair(enc)); } catch (_) {}
+    try { wallets.push(getKeypair(enc)); } catch (e) { console.warn('sellAll sub decode failed', e?.message || e); }
   }
   if (!wallets.length) return res.status(400).json({ error: 'No wallets to sell from' });
 
@@ -452,21 +584,23 @@ const sellAll = async (req, res) => {
     try {
       const uiAmt = await getTokenUiBalance(connection, kp.publicKey, new web3.PublicKey(tokenMint));
       if (uiAmt > 0) {
-        const txid = await performSwap(user, kp, tokenMint, solMint, uiAmt, 0.5);
+        const swap = await performSwap(user, kp, tokenMint, solMint, uiAmt, 0.5, { action: 'sell-all', mode: 'admin' });
+        const txid = swap?.txid || null;
+        const volumeSol = swap?.volumeSol || 0;
         await TxLog.create({
           userId: req.userId,
           wallet: kp.publicKey.toString(),
           action: 'sell-all',
           inputMint: tokenMint,
           outputMint: solMint,
-          amount: uiAmt,
+          amountSol: volumeSol,
           mode: 'admin',
           txid,
-          status: 'confirmed',
+          status: txid ? 'confirmed' : 'sent',
         });
-        results.push({ wallet: kp.publicKey.toString(), sold: uiAmt, txid });
+        results.push({ wallet: kp.publicKey.toString(), sold: uiAmt, txid, volumeSol });
       } else {
-        results.push({ wallet: kp.publicKey.toString(), sold: 0, txid: null });
+        results.push({ wallet: kp.publicKey.toString(), sold: 0, txid: null, volumeSol: 0 });
       }
     } catch (e) {
       await TxLog.create({
@@ -475,7 +609,8 @@ const sellAll = async (req, res) => {
         action: 'sell-all',
         inputMint: tokenMint,
         outputMint: solMint,
-        status: 'error',
+        amountSol: 0,
+        status: 'failed',
         error: String(e?.message || e),
       });
       results.push({ wallet: kp.publicKey.toString(), error: String(e?.message || e) });
@@ -485,9 +620,6 @@ const sellAll = async (req, res) => {
   res.json({ results });
 };
 
-/**
- * Close empty token accounts (source + sub-wallets), chunked.
- */
 const closeAccounts = async (req, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
@@ -552,7 +684,18 @@ const closeAccounts = async (req, res) => {
 
 /* ------------------------- Bot + settings -------------------------- */
 
-const startBotController = async (req, res) => { await startBot(req.userId); res.json({ message: 'Bot started' }); };
+const startBotController = async (req, res) => {
+  const user = await User.findById(req.userId);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const preflight = validateBotConfig(user);
+  if (!preflight.ok) {
+    return res.status(400).json({ error: 'Bot configuration incomplete', issues: preflight.issues });
+  }
+
+  await startBot(user._id);
+  res.json({ message: 'Bot started' });
+};
 const stopBotController = async (req, res) => { await stopBot(req.userId); res.json({ message: 'Bot stopped' }); };
 
 const updateSettings = async (req, res) => {
@@ -577,6 +720,8 @@ const getSettings = async (req, res) => {
   user.activeWallets = (user.activeWallets || []).filter(a => allowed.has(a));
   await user.save();
 
+  const preflight = validateBotConfig(user);
+
   res.json({
     tokenMint: user.tokenMint || '',
     rpc: user.rpc || '',
@@ -588,6 +733,7 @@ const getSettings = async (req, res) => {
     running: !!user.running,
     activeWallets: user.activeWallets || [],
     allWallets: subAddresses,
+    preflight,
   });
 };
 
@@ -614,10 +760,11 @@ const portfolio = async (req, res) => {
       limit(async () => {
         try {
           const holdings = await getWalletHoldings(connection, pk, force);
-          results.push({ wallet: pk.toString(), holdings });
+          const solLamports = await withRetry(() => connection.getBalance(pk));
+          results.push({ wallet: pk.toString(), holdings, solBalance: solLamports / web3.LAMPORTS_PER_SOL });
         } catch (e) {
           console.warn('Portfolio fetch error for', pk.toString(), e?.message || e);
-          results.push({ wallet: pk.toString(), holdings: [] });
+          results.push({ wallet: pk.toString(), holdings: [], solBalance: 0 });
         }
       })
     )
@@ -641,7 +788,7 @@ const getActivity = async (req, res) => {
     action: d.action,
     inputMint: d.inputMint,
     outputMint: d.outputMint,
-    amount: d.amount,
+    amount: d.amountSol || 0,
     mode: d.mode,
     txid: d.txid,
     status: d.status,
@@ -688,7 +835,7 @@ module.exports = {
   // overview
   getDashboard,
   // referrals
-  manageReferral, getTier,
+  manageReferral, listReferrals, setReferrer, getTier,
   // wallets
   manageWallets, listWallets, addOneWallet, removeWalletByAddress,
   getDepositAddress, newDepositAddress, setActiveWallets,

@@ -13,6 +13,8 @@ const {
   getDashboard,
   // referrals
   manageReferral,
+  listReferrals,
+  setReferrer,
   getTier,
   // wallets
   listWallets,
@@ -62,6 +64,8 @@ router.get('/portfolio', authRequired, portfolio);
 
 /** ---------- Referrals ---------- **/
 router.post('/referral/claim', authRequired, manageReferral);
+router.get('/referral/list', authRequired, listReferrals);
+router.post('/referral/set', authRequired, setReferrer);
 router.get('/tier', authRequired, getTier);
 
 /** ---------- Wallet admin + funds ---------- **/

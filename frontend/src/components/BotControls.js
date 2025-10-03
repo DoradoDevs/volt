@@ -1,4 +1,4 @@
-// frontend/src/components/BotControls.js
+﻿// frontend/src/components/BotControls.js
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../services/api';
 
@@ -130,7 +130,7 @@ const ModePicker = ({ value, onChange, options }) => {
         }}
       >
         <span>{current}</span>
-        <span style={{ opacity: 0.8 }}>▾</span>
+        <span style={{ opacity: 0.8 }}>â–¾</span>
       </div>
 
       {open && (
@@ -176,7 +176,7 @@ const ModePicker = ({ value, onChange, options }) => {
                 onMouseLeave={(e) => { e.currentTarget.style.background = active ? '#3a006f' : 'transparent'; }}
               >
                 <span>{opt.label}</span>
-                {active && <span style={{ opacity: 0.9 }}>✓</span>}
+                {active && <span style={{ opacity: 0.9 }}>âœ“</span>}
               </div>
             );
           })}
@@ -187,7 +187,7 @@ const ModePicker = ({ value, onChange, options }) => {
 };
 
 /** --- Component --- */
-const BotControls = ({ running }) => {
+const BotControls = ({ running, onStatusChange }) => {
   const [tokenMint, setTokenMint] = useState('');
   const [rpc, setRpc] = useState('');
   const [minBuy, setMinBuy] = useState('');
@@ -205,21 +205,27 @@ const BotControls = ({ running }) => {
   const [walletBalances, setWalletBalances] = useState({});   // address -> number
   const [activeWallets, setActiveWallets] = useState([]);
   const [showHelp, setShowHelp] = useState(false);
+  const [preflight, setPreflight] = useState({ ok: true, issues: [] });
+
+  const applySettings = (data = {}) => {
+    setTokenMint(data.tokenMint || '');
+    setRpc(data.rpc || '');
+    setMinBuy(data.minBuy !== undefined ? String(data.minBuy) : '');
+    setMaxBuy(data.maxBuy !== undefined ? String(data.maxBuy) : '');
+    setMinDelay(data.minDelay !== undefined ? String(data.minDelay) : '');
+    setMaxDelay(data.maxDelay !== undefined ? String(data.maxDelay) : '');
+    setMode(data.mode || 'pure');
+    setAllWallets(data.allWallets || []);
+    setActiveWallets(data.activeWallets || []);
+    setPreflight(data.preflight || { ok: true, issues: [] });
+  };
 
   // Load settings
   useEffect(() => {
     (async () => {
       try {
         const { data } = await api.get('/settings/get');
-        setTokenMint(data.tokenMint || '');
-        setRpc(data.rpc || '');
-        setMinBuy(data.minBuy !== undefined ? String(data.minBuy) : '');
-        setMaxBuy(data.maxBuy !== undefined ? String(data.maxBuy) : '');
-        setMinDelay(data.minDelay !== undefined ? String(data.minDelay) : '');
-        setMaxDelay(data.maxDelay !== undefined ? String(data.maxDelay) : '');
-        setMode(data.mode || 'pure');
-        setAllWallets(data.allWallets || []);
-        setActiveWallets(data.activeWallets || []);
+        applySettings(data || {});
       } catch (e) {
         console.error('Failed to load settings', e);
       } finally {
@@ -254,12 +260,12 @@ const BotControls = ({ running }) => {
     const nMaxBuy = Number(maxBuy);
     if (!(nMinBuy > 0)) errs.minBuy = 'Must be a number > 0.';
     if (!(nMaxBuy > 0)) errs.maxBuy = 'Must be a number > 0.';
-    if (nMinBuy > 0 && nMaxBuy > 0 && nMinBuy > nMaxBuy) errs.maxBuy = 'Max must be ≥ Min.';
+    if (nMinBuy > 0 && nMaxBuy > 0 && nMinBuy > nMaxBuy) errs.maxBuy = 'Max must be â‰¥ Min.';
     const nMinDelay = Number(minDelay);
     const nMaxDelay = Number(maxDelay);
-    if (!(nMinDelay >= 0)) errs.minDelay = 'Must be ≥ 0 ms.';
+    if (!(nMinDelay >= 0)) errs.minDelay = 'Must be â‰¥ 0 ms.';
     if (!(nMaxDelay > 0)) errs.maxDelay = 'Must be > 0 ms.';
-    if (Number.isFinite(nMinDelay) && Number.isFinite(nMaxDelay) && nMinDelay > nMaxDelay) errs.maxDelay = 'Max must be ≥ Min.';
+    if (Number.isFinite(nMinDelay) && Number.isFinite(nMaxDelay) && nMinDelay > nMaxDelay) errs.maxDelay = 'Max must be â‰¥ Min.';
     if (rpc && !/^https?:\/\/.+/i.test(rpc.trim())) errs.rpc = 'Must be a valid URL (or leave blank).';
     if (!activeWallets.length) errs.activeWallets = 'Select at least one wallet for the bot.';
     return { errs, isValid: Object.keys(errs).length === 0 };
@@ -272,9 +278,11 @@ const BotControls = ({ running }) => {
   const saveWalletSelection = async () => {
     try {
       await api.post('/wallets/active', { addresses: activeWallets });
+      return true;
     } catch (e) {
       console.error(e);
       alert('Error saving wallet selection');
+      return false;
     }
   };
 
@@ -291,8 +299,12 @@ const BotControls = ({ running }) => {
         maxDelay: parseNum(maxDelay),
         mode,
       });
-      await saveWalletSelection();
+      const saved = await saveWalletSelection();
+      if (!saved) return;
+      const refreshed = await api.get('/settings/get');
+      applySettings(refreshed.data || {});
       alert('Settings saved');
+      onStatusChange?.();
     } catch (e) {
       console.error(e);
       alert(e.response?.data?.error || 'Error saving settings');
@@ -303,10 +315,21 @@ const BotControls = ({ running }) => {
 
   const handleStart = async () => {
     if (!validation.isValid) return alert('Fix the errors first.');
+    if (!preflight.ok) {
+      const message = ['Bot configuration incomplete.'];
+      if (preflight.issues?.length) {
+        message.push('');
+        message.push(...preflight.issues.map((issue) => `- ${issue}`));
+      }
+      const newline = String.fromCharCode(10);
+      alert(message.join(newline));
+      return;
+    }
     setStarting(true);
     try {
       await api.post('/bot/start');
       alert('Bot started');
+      onStatusChange?.();
     } catch (e) {
       console.error(e);
       alert(e.response?.data?.error || 'Error starting bot');
@@ -320,6 +343,7 @@ const BotControls = ({ running }) => {
     try {
       await api.post('/bot/stop');
       alert('Bot stopped');
+      onStatusChange?.();
     } catch (e) {
       console.error(e);
       alert(e.response?.data?.error || 'Error stopping bot');
@@ -331,7 +355,7 @@ const BotControls = ({ running }) => {
   const toggleWallet = (addr) =>
     setActiveWallets((prev) => (prev.includes(addr) ? prev.filter((a) => a !== addr) : prev.concat(addr)));
 
-  if (loading) return <div style={{ margin: '16px 0' }}><em>Loading bot settings…</em></div>;
+  if (loading) return <div style={{ margin: '16px 0' }}><em>Loading bot settingsâ€¦</em></div>;
 
   const usingServerRpc = rpc.trim() === '';
   const fmt = (n) => (Number.isFinite(Number(n)) ? Number(n).toFixed(2) : '0.00');
@@ -352,7 +376,7 @@ const BotControls = ({ running }) => {
       <Panel>
         <div style={{ display: 'grid', gap: 12 }}>
           <Row label="Token Mint Address" error={errors.tokenMint}>
-            <Input type="text" value={tokenMint} onChange={(e) => setTokenMint(e.target.value)} placeholder="So1111… (token mint)" />
+            <Input type="text" value={tokenMint} onChange={(e) => setTokenMint(e.target.value)} placeholder="So1111â€¦ (token mint)" />
           </Row>
 
           <Row label="RPC URL" hint={usingServerRpc ? 'Using server mainnet RPC (default).' : undefined} error={errors.rpc}>
@@ -380,11 +404,11 @@ const BotControls = ({ running }) => {
           </Row>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
-            <Button onClick={handleSaveSettings} disabled={saving}>{saving ? 'Saving…' : 'Save Settings'}</Button>
+            <Button onClick={handleSaveSettings} disabled={saving}>{saving ? 'Savingâ€¦' : 'Save Settings'}</Button>
             <Button onClick={handleStart} disabled={running || starting || !validation.isValid} title={!validation.isValid ? 'Fix settings errors first' : undefined}>
-              {starting ? 'Starting…' : 'Start Bot'}
+              {starting ? 'Startingâ€¦' : 'Start Bot'}
             </Button>
-            <Button tone="danger" onClick={handleStop} disabled={!running || stopping}>{stopping ? 'Stopping…' : 'Stop Bot'}</Button>
+            <Button tone="danger" onClick={handleStop} disabled={!running || stopping}>{stopping ? 'Stoppingâ€¦' : 'Stop Bot'}</Button>
           </div>
         </div>
       </Panel>
@@ -515,7 +539,7 @@ const BotControls = ({ running }) => {
             </p>
 
             <p><strong>Withdrawals</strong><br />
-              From the Wallets page, withdraw SOL from your deposit wallet to any address. Use “MAX” for full balance.
+              From the Wallets page, withdraw SOL from your deposit wallet to any address. Use â€œMAXâ€ for full balance.
             </p>
 
             <p><strong>Tier Discounts</strong><br />
@@ -529,3 +553,7 @@ const BotControls = ({ running }) => {
 };
 
 export default BotControls;
+
+
+
+
