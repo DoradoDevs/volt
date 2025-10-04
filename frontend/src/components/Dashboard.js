@@ -7,6 +7,7 @@ import BotControls from './BotControls';
 import Referral from './Referral';
 import Tier from './Tier';
 import Activity from './Activity';
+import theme from '../theme';
 
 const Tabs = ({ tab, setTab }) => {
   const tabs = [
@@ -18,7 +19,7 @@ const Tabs = ({ tab, setTab }) => {
   ];
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {tabs.map((t) => {
           const active = tab === t.id;
@@ -27,13 +28,15 @@ const Tabs = ({ tab, setTab }) => {
               key={t.id}
               onClick={() => setTab(t.id)}
               style={{
-                padding: '8px 12px',
-                borderRadius: 10,
-                border: `1px solid ${active ? '#7B68EE' : 'rgba(230,230,250,0.25)'}`,
-                background: active ? 'rgba(123,104,238,0.18)' : 'rgba(255,255,255,0.04)',
-                color: '#E6E6FA',
+                padding: '10px 16px',
+                borderRadius: theme.borderRadius.md,
+                border: `1px solid ${active ? theme.colors.borderPrimary : theme.colors.borderInput}`,
+                background: active ? theme.colors.bgSelected : theme.colors.bgPanel,
+                color: theme.colors.text,
                 cursor: 'pointer',
                 fontWeight: 600,
+                fontSize: 14,
+                transition: 'all 0.2s ease',
               }}
             >
               {t.label}
@@ -48,10 +51,10 @@ const Tabs = ({ tab, setTab }) => {
 const Card = ({ children, style }) => (
   <div
     style={{
-      background: 'rgba(255,192,203,0.08)',
-      border: '1px solid rgba(255,192,203,0.25)',
-      borderRadius: 14,
-      padding: 14,
+      background: theme.colors.bgPanel,
+      border: `1px solid ${theme.colors.borderInput}`,
+      borderRadius: theme.borderRadius.lg,
+      padding: 20,
       ...style,
     }}
   >
@@ -65,11 +68,11 @@ const StatusPill = ({ ok, label }) => (
       display: 'inline-flex',
       alignItems: 'center',
       gap: 6,
-      padding: '4px 10px',
-      borderRadius: 999,
-      background: ok ? 'rgba(56,189,248,0.18)' : 'rgba(251,113,133,0.18)',
-      border: `1px solid ${ok ? 'rgba(56,189,248,0.35)' : 'rgba(251,113,133,0.35)'}`,
-      color: ok ? '#38bdf8' : '#fb7185',
+      padding: '6px 12px',
+      borderRadius: theme.borderRadius.full,
+      background: ok ? 'rgba(183,163,255,0.15)' : 'rgba(255,107,129,0.15)',
+      border: `1px solid ${ok ? 'rgba(183,163,255,0.4)' : 'rgba(255,107,129,0.4)'}`,
+      color: ok ? theme.colors.success : theme.colors.warning,
       fontSize: 12,
       fontWeight: 600,
     }}
@@ -80,7 +83,8 @@ const StatusPill = ({ ok, label }) => (
         width: 6,
         height: 6,
         borderRadius: '50%',
-        background: ok ? '#38bdf8' : '#fb7185',
+        background: ok ? theme.colors.success : theme.colors.warning,
+        boxShadow: `0 0 6px ${ok ? theme.colors.success : theme.colors.warning}`,
       }}
     />
     {label}
@@ -180,61 +184,77 @@ const Dashboard = () => {
 
   if (loadingInfo) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', color: '#E6E6FA' }}>
-        <p>Loading your dashboard
-</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', color: theme.colors.text }}>
+        <p>Loading your dashboard…</p>
       </div>
     );
   }
 
   if (!info) {
     return (
-      <div style={{ color: '#ffb4c0', textAlign: 'center', padding: '24px' }}>
+      <div style={{ color: theme.colors.error, textAlign: 'center', padding: '24px' }}>
         {infoError || 'Dashboard unavailable.'}
       </div>
     );
   }
 
   return (
-    <div className="dashboard" style={{ padding: 24 }}>
-      <h1 style={{ textAlign: 'center' }}>VolT Dashboard</h1>
+    <div className="dashboard" style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>
+      <h1 style={{
+        textAlign: 'center',
+        color: theme.colors.textHeading,
+        fontSize: 32,
+        marginBottom: 24,
+        textShadow: `0 0 20px ${theme.colors.purple}40`
+      }}>
+        Volume Terminal
+      </h1>
       {infoError && (
-        <div style={{ color: 'salmon', textAlign: 'center', marginBottom: 12 }}>{infoError}</div>
+        <div style={{
+          color: theme.colors.error,
+          textAlign: 'center',
+          marginBottom: 16,
+          padding: 12,
+          background: 'rgba(255,107,129,0.1)',
+          borderRadius: theme.borderRadius.md,
+          border: `1px solid ${theme.colors.warning}40`
+        }}>
+          {infoError}
+        </div>
       )}
 
       <Tabs tab={tab} setTab={setTab} />
 
       {tab === 'volume' && (
-        <div style={{ display: 'grid', gap: 16 }}>
+        <div style={{ display: 'grid', gap: 20 }}>
           <Card>
-            <h2 style={{ margin: 0, marginBottom: 12 }}>Bot Overview</h2>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+            <h2 style={{ margin: 0, marginBottom: 16, color: theme.colors.textHeading }}>Bot Overview</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16 }}>
               <div>
-                <div style={{ fontSize: 12, opacity: 0.7 }}>Status</div>
+                <div style={{ fontSize: 12, color: theme.colors.textHint, marginBottom: 6 }}>Status</div>
                 <StatusPill ok={Boolean(info.running)} label={info.running ? 'Running' : 'Idle'} />
               </div>
               <div>
-                <div style={{ fontSize: 12, opacity: 0.7 }}>Active Wallets</div>
-                <div style={{ fontSize: 18, fontWeight: 600 }}>{info.activeWallets || 0}</div>
+                <div style={{ fontSize: 12, color: theme.colors.textHint, marginBottom: 6 }}>Active Wallets</div>
+                <div style={{ fontSize: 20, fontWeight: 600, color: theme.colors.text }}>{info.activeWallets || 0}</div>
               </div>
               <div>
-                <div style={{ fontSize: 12, opacity: 0.7 }}>Total Wallets</div>
-                <div style={{ fontSize: 18, fontWeight: 600 }}>{info.subWallets || 0}</div>
+                <div style={{ fontSize: 12, color: theme.colors.textHint, marginBottom: 6 }}>Total Wallets</div>
+                <div style={{ fontSize: 20, fontWeight: 600, color: theme.colors.text }}>{info.subWallets || 0}</div>
               </div>
               <div>
-                <div style={{ fontSize: 12, opacity: 0.7 }}>Deposit SOL</div>
-                <div style={{ fontSize: 18, fontWeight: 600 }}>{Number(info.sourceBalance || 0).toFixed(4)}</div>
+                <div style={{ fontSize: 12, color: theme.colors.textHint, marginBottom: 6 }}>Deposit SOL</div>
+                <div style={{ fontSize: 20, fontWeight: 600, color: theme.colors.success }}>{Number(info.sourceBalance || 0).toFixed(4)}</div>
               </div>
             </div>
           </Card>
-
 
           <BotControls running={Boolean(info.running)} onStatusChange={handleBotStatusChange} />
         </div>
       )}
 
       {tab === 'funds' && (
-        <div style={{ display: 'grid', gap: 16 }}>
+        <div style={{ display: 'grid', gap: 20 }}>
           <FundsManager
             sourceAddress={info.sourceAddress || ''}
             balance={info.sourceBalance || 0}
@@ -244,7 +264,7 @@ const Dashboard = () => {
       )}
 
       {tab === 'wallets' && (
-        <div style={{ display: 'grid', gap: 16 }}>
+        <div style={{ display: 'grid', gap: 20 }}>
           <WalletManager
             numWallets={info.subWallets || 0}
             activeCount={info.activeWallets || 0}
@@ -261,13 +281,8 @@ const Dashboard = () => {
       )}
 
       {tab === 'rewards' && (
-        <div style={{ display: 'grid', gap: 16 }}>
-          <Card>
-            <Tier tier={info.tier ?? 'unranked'} />
-            <div style={{ fontSize: 13, opacity: 0.75, marginTop: -6 }}>
-              Discounts scale with your cumulative volume.
-            </div>
-          </Card>
+        <div style={{ display: 'grid', gap: 20 }}>
+          <Tier tier={info.tier ?? 'unranked'} volume={info.volume ?? 0} />
           <Card>
             <Referral
               code={info.referralCode ?? ''}

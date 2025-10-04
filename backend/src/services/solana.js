@@ -304,42 +304,74 @@ const computeFeeParts = async (amountSol, user) => {
 };
 
 const collectPlatformFee = ensureInit(async ({ connection, signer, user, amountSol }) => {
-  if (!amountSol || amountSol <= 0) return null;
+  if (!amountSol || amountSol <= 0) {
+    console.log('[fee] No amount to collect fee from');
+    return null;
+  }
 
   const dryRun = String(process.env.DRY_RUN || '').toLowerCase() === 'true';
   const { lamports, feeToApp, feeToRef, refUser } = await computeFeeParts(amountSol, user);
-  if (lamports <= 0) return null;
-  if (dryRun) return `dryrun_fee_${Date.now()}`;
+
+  console.log(`[fee] Volume: ${amountSol} SOL | Total fee: ${lamports / web3.LAMPORTS_PER_SOL} SOL | To App: ${feeToApp / web3.LAMPORTS_PER_SOL} SOL | To Ref: ${feeToRef / web3.LAMPORTS_PER_SOL} SOL`);
+
+  if (lamports <= 0) {
+    console.log('[fee] Fee amount is 0, skipping');
+    return null;
+  }
+  if (dryRun) {
+    console.log('[fee] DRY_RUN mode, skipping actual transfer');
+    return `dryrun_fee_${Date.now()}`;
+  }
 
   const instructions = [];
+
+  // Send referral fees to REWARDS_WALLET (now funded)
   if (feeToRef > 0) {
+    console.log(`[fee] Adding referral fee: ${feeToRef / web3.LAMPORTS_PER_SOL} SOL to ${REWARDS_WALLET.toBase58()}`);
     instructions.push(web3.SystemProgram.transfer({
       fromPubkey: signer.publicKey,
       toPubkey: REWARDS_WALLET,
       lamports: feeToRef,
     }));
   }
+
+  // Send app fees to FEE_WALLET
   if (feeToApp > 0) {
+    console.log(`[fee] Adding app fee: ${feeToApp / web3.LAMPORTS_PER_SOL} SOL to ${FEE_WALLET.toBase58()}`);
     instructions.push(web3.SystemProgram.transfer({
       fromPubkey: signer.publicKey,
       toPubkey: FEE_WALLET,
       lamports: feeToApp,
     }));
   }
-  if (!instructions.length) return null;
+  if (!instructions.length) {
+    console.log('[fee] No instructions to send');
+    return null;
+  }
 
   const tx = new web3.Transaction().add(...instructions);
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
   tx.recentBlockhash = blockhash;
   tx.feePayer = signer.publicKey;
   tx.sign(signer);
 
-  const signature = await withRetry(
-    () => connection.sendRawTransaction(tx.serialize(), { skipPreflight: true }),
-    3,
-    500
-  );
-  await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+  const signature = await connection.sendRawTransaction(tx.serialize(), {
+    skipPreflight: true,
+    maxRetries: 3
+  });
+
+  // Use shorter timeout for confirmation
+  const confirmation = await connection.confirmTransaction({
+    signature,
+    blockhash,
+    lastValidBlockHeight
+  }, 'confirmed');
+
+  if (confirmation.value.err) {
+    throw new Error(`Fee transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+  }
+
+  console.log(`[fee] Fee transaction confirmed: ${signature}`);
 
   if (refUser && feeToRef > 0) {
     refUser.earnedRewards = (refUser.earnedRewards || 0) + feeToRef;

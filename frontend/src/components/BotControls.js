@@ -1,17 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../services/api';
+import theme from '../theme';
 
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
+// Use centralized theme
 const palette = {
-  panelBg: 'rgba(255,192,203,0.08)',
-  panelBorder: 'rgba(255,192,203,0.25)',
-  inputBg: 'rgba(255,255,255,0.06)',
-  inputBorder: 'rgba(230,230,250,0.25)',
-  text: '#E6E6FA',
-  hint: 'rgba(230,230,250,0.7)',
-  label: 'rgba(230,230,250,0.9)',
-  focusShadow: '0 0 0 3px rgba(123,104,238,0.25)',
+  panelBg: theme.colors.pink,
+  panelBorder: theme.colors.borderPanel,
+  inputBg: theme.colors.bgInput,
+  inputBorder: theme.colors.borderInput,
+  text: theme.colors.text,
+  hint: theme.colors.textHint,
+  label: theme.colors.textLabel,
+  focusShadow: theme.shadows.focus,
 };
 
 const Panel = ({ children, style }) => (
@@ -118,7 +120,6 @@ const ModePicker = ({ value, onChange, options }) => {
     growth: 'Buy → Sell 90%. Accumulates tokens while generating volume.',
     moonshot: 'Buy only, no selling. Pump price and accumulate.',
     human: 'Random wallet groups with delayed sells. Looks organic.',
-    bump: 'Continuous buy/sell cycles. Steady bumping.',
   };
 
   return (
@@ -146,12 +147,12 @@ const ModePicker = ({ value, onChange, options }) => {
             left: 0,
             right: 0,
             marginTop: 4,
-            background: '#1a0d2e',
-            border: '1px solid rgba(123,104,238,0.5)',
-            borderRadius: 10,
+            background: theme.colors.bgDropdown,
+            border: `1px solid ${theme.colors.borderPrimary}`,
+            borderRadius: theme.borderRadius.md,
             overflow: 'hidden',
             zIndex: 1000,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+            boxShadow: theme.shadows.dropdown,
           }}
         >
           {options.map((opt) => (
@@ -166,8 +167,8 @@ const ModePicker = ({ value, onChange, options }) => {
                 width: '100%',
                 padding: '12px 14px',
                 border: 'none',
-                background: opt.value === value ? 'rgba(123,104,238,0.2)' : 'transparent',
-                color: palette.text,
+                background: opt.value === value ? theme.colors.bgSelected : 'transparent',
+                color: theme.colors.text,
                 textAlign: 'left',
                 cursor: 'pointer',
                 transition: 'background 0.15s',
@@ -176,7 +177,7 @@ const ModePicker = ({ value, onChange, options }) => {
               }}
               onMouseEnter={(e) => {
                 if (opt.value !== value) {
-                  e.currentTarget.style.background = 'rgba(123,104,238,0.12)';
+                  e.currentTarget.style.background = theme.colors.bgHover;
                 }
               }}
               onMouseLeave={(e) => {
@@ -186,7 +187,7 @@ const ModePicker = ({ value, onChange, options }) => {
               }}
             >
               <div style={{ fontWeight: 600, fontSize: 14 }}>{opt.label}</div>
-              <div style={{ fontSize: 12, color: palette.hint, lineHeight: 1.4 }}>
+              <div style={{ fontSize: 12, color: theme.colors.textHint, lineHeight: 1.4 }}>
                 {modeDescriptions[opt.value] || ''}
               </div>
             </button>
@@ -502,7 +503,6 @@ const BotControls = ({ running, onStatusChange }) => {
     { value: 'growth', label: 'Growth' },
     { value: 'moonshot', label: 'Moonshot' },
     { value: 'human', label: 'Human' },
-    { value: 'bump', label: 'Bump' },
   ];
 
   const handleSaveRpc = async () => {
@@ -578,6 +578,10 @@ const BotControls = ({ running, onStatusChange }) => {
   };
 
   const handleStart = async () => {
+    if (!mode || mode.trim() === '') {
+      alert('Please select a bot mode before starting.');
+      return;
+    }
     if (!validation.isValid) {
       alert('Fix the highlighted fields first.');
       return;
@@ -664,7 +668,7 @@ const BotControls = ({ running, onStatusChange }) => {
 
   return (
     <div style={{ margin: '18px 0' }}>
-      <h2 style={{ textAlign: 'center', marginBottom: 12 }}>Volume Panel</h2>
+      <h2 style={{ textAlign: 'center', marginBottom: 12 }}>Volume Terminal</h2>
 
       <Panel>
         <div style={{ display: 'grid', gap: 14 }}>
@@ -741,10 +745,7 @@ const BotControls = ({ running, onStatusChange }) => {
           </Row>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-            <Button onClick={handleSaveSettings} disabled={saving}>
-              {saving ? 'Saving�' : 'Save Settings'}
-            </Button>
-            <Button onClick={handleStart} disabled={starting}>
+            <Button onClick={handleStart} disabled={starting || !mode}>
               {starting ? 'Starting�' : 'Start Bot'}
             </Button>
             <Button

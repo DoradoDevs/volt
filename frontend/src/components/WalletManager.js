@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
+import theme from '../theme';
 
 const containerStyle = {
-  border: '1px solid #7B68EE',
-  borderRadius: 12,
+  border: `1px solid ${theme.colors.borderPrimary}`,
+  borderRadius: theme.borderRadius.lg,
   padding: 16,
-  background: 'rgba(255,255,255,0.04)',
+  background: theme.colors.bgPanel,
 };
 
 const summaryCardStyle = {

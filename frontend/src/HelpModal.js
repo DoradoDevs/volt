@@ -47,7 +47,6 @@ const HelpModal = ({ onClose }) => (
         <li><strong>Growth:</strong> Buy → Sell 90%. Slowly accumulates tokens while generating volume.</li>
         <li><strong>Moonshot:</strong> Buy only, no selling. Use to pump price and accumulate.</li>
         <li><strong>Human:</strong> Random wallet groups buy, wait 15-30s, then sell. Looks organic.</li>
-        <li><strong>Bump:</strong> Like Pure but continuous cycles. Good for steady bumping.</li>
       </ul>
 
       <p><strong>💰 Managing Funds</strong></p>

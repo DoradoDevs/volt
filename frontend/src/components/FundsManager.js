@@ -1,16 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
+import theme from '../theme';
 
 const palette = {
-  border: '1px solid rgba(123,104,238,0.55)',
-  background: 'rgba(255,255,255,0.04)',
-  heading: '#bda4ff',
-  text: '#E6E6FA',
+  border: `1px solid ${theme.colors.borderPrimary}`,
+  background: theme.colors.bgPanel,
+  heading: theme.colors.textHeading,
+  text: theme.colors.text,
 };
 
 const panelStyle = {
   border: palette.border,
-  borderRadius: 14,
+  borderRadius: theme.borderRadius.xl,
   padding: 18,
   background: palette.background,
 };
@@ -181,6 +182,40 @@ const FundsManager = ({ sourceAddress, balance, onChanged }) => {
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
+      {/* Instructions Panel */}
+      <div style={{
+        ...panelStyle,
+        background: 'rgba(123,104,238,0.08)',
+        border: `1px solid ${theme.colors.borderPrimary}`,
+      }}>
+        <h3 style={{ ...sectionTitle, marginBottom: 12 }}>How to Use</h3>
+        <div style={{ display: 'grid', gap: 10, fontSize: 13, textAlign: 'left', lineHeight: 1.6 }}>
+          <div>
+            <strong style={{ color: theme.colors.purpleLight }}>Deposits:</strong>
+            <ul style={{ margin: '6px 0 0 20px', paddingLeft: 0 }}>
+              <li>Your deposit address is auto-generated and permanent</li>
+              <li>Send SOL to this address from any wallet or exchange</li>
+              <li>Use "Rotate" to generate a new deposit address (old ones remain usable)</li>
+            </ul>
+          </div>
+          <div>
+            <strong style={{ color: theme.colors.purpleLight }}>Withdrawals:</strong>
+            <ul style={{ margin: '6px 0 0 20px', paddingLeft: 0 }}>
+              <li>Enter SOL amount or click "MAX" to withdraw full balance</li>
+              <li>Paste destination wallet address</li>
+              <li>Transaction fees (~0.001 SOL) are deducted from your balance</li>
+            </ul>
+          </div>
+          <div>
+            <strong style={{ color: theme.colors.purpleLight }}>Housekeeping:</strong>
+            <ul style={{ margin: '6px 0 0 20px', paddingLeft: 0 }}>
+              <li><strong>Consolidate:</strong> Move all SOL from sub-wallets back to deposit wallet</li>
+              <li><strong>Close Accounts:</strong> Close empty token accounts to reclaim rent (~0.002 SOL each)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       <div style={{ ...panelStyle, display: 'grid', gap: 18 }}>
         <div style={{ textAlign: 'center', display: 'grid', gap: 8 }}>
           <h3 style={sectionTitle}>Deposit &amp; Withdraw</h3>

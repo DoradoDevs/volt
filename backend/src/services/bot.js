@@ -175,6 +175,9 @@ async function botLoop(userId, controller) {
     const randomAmount = () => Math.max(minBuy, Math.random() * (maxBuy - minBuy) + minBuy);
     const randomDelay = () => Math.random() * (maxDelay - minDelay) + minDelay;
 
+    // Track successful swaps to detect if bot should stop due to insufficient funds
+    let successfulSwaps = 0;
+
     try {
       switch (mode) {
         case 'pure':
@@ -192,6 +195,7 @@ async function botLoop(userId, controller) {
             });
             if (controller.stop) return;
             if (buy && buy.output.uiAmount > 0) {
+              successfulSwaps++;
               await sleep(randomDelay());
               if (controller.stop) return;
               const sell = await trySwap({
@@ -207,6 +211,8 @@ async function botLoop(userId, controller) {
               // If sell failed, log it but continue
               if (!sell) {
                 console.warn(`[bot ${user._id}] pure mode: sell failed for wallet ${wallet.publicKey.toBase58()}, continuing to next wallet`);
+              } else {
+                successfulSwaps++;
               }
             } else {
               console.warn(`[bot ${user._id}] pure mode: buy failed or returned 0 output, skipping sell`);
@@ -231,11 +237,12 @@ async function botLoop(userId, controller) {
             });
             if (controller.stop) return;
             if (buy && buy.output.uiAmount > 0) {
+              successfulSwaps++;
               const sellAmount = buy.output.uiAmount * 0.9;
               if (sellAmount > 0) {
                 await sleep(randomDelay());
                 if (controller.stop) return;
-                await trySwap({
+                const sell = await trySwap({
                   user,
                   walletKeypair: wallet,
                   inputMint: tokenMint,
@@ -245,6 +252,7 @@ async function botLoop(userId, controller) {
                   action: 'bot-sell',
                   controller,
                 });
+                if (sell) successfulSwaps++;
               }
             }
             await sleep(randomDelay());
@@ -255,7 +263,7 @@ async function botLoop(userId, controller) {
         case 'moonshot':
           for (const wallet of wallets) {
             if (controller.stop) return;
-            await trySwap({
+            const buy = await trySwap({
               user,
               walletKeypair: wallet,
               inputMint: SOL_MINT,
@@ -265,6 +273,7 @@ async function botLoop(userId, controller) {
               action: 'bot-buy',
               controller,
             });
+            if (buy) successfulSwaps++;
             if (controller.stop) return;
             await sleep(randomDelay());
           }
@@ -298,6 +307,7 @@ async function botLoop(userId, controller) {
             });
             if (controller.stop) return;
             if (buy && buy.output.uiAmount > 0) {
+              successfulSwaps++;
               sells.push({ wallet, amount: buy.output.uiAmount });
             }
             await sleep(Math.random() * 5000);
@@ -311,7 +321,7 @@ async function botLoop(userId, controller) {
           // Sell phase: staggered sells with 3-8s delays (looks more organic)
           for (const sell of sells) {
             if (controller.stop) return;
-            await trySwap({
+            const sellResult = await trySwap({
               user,
               walletKeypair: sell.wallet,
               inputMint: tokenMint,
@@ -321,6 +331,7 @@ async function botLoop(userId, controller) {
               action: 'bot-sell',
               controller,
             });
+            if (sellResult) successfulSwaps++;
             // Add delay between sells to look more natural
             if (sells.indexOf(sell) < sells.length - 1) {
               await sleep(3000 + Math.random() * 5000);
@@ -346,9 +357,10 @@ async function botLoop(userId, controller) {
             });
             if (controller.stop) return;
             if (buy && buy.output.uiAmount > 0) {
+              successfulSwaps++;
               await sleep(randomDelay());
               if (controller.stop) return;
-              await trySwap({
+              const sell = await trySwap({
                 user,
                 walletKeypair: wallet,
                 inputMint: tokenMint,
@@ -358,6 +370,7 @@ async function botLoop(userId, controller) {
                 action: 'bot-sell',
                 controller,
               });
+              if (sell) successfulSwaps++;
             }
             await sleep(randomDelay());
             if (controller.stop) return;
@@ -372,11 +385,52 @@ async function botLoop(userId, controller) {
       heartbeat(controller, { lastError: { ts: Date.now(), message: err?.message || String(err) } });
     }
 
-    heartbeat(controller, { phase: 'cooldown' });
-    for (let i = 0; i < 20; i += 1) {
-      if (!controller || controller.stop) return;
-      await sleep(1000);
+    // If no successful swaps in this cycle, check if we should stop due to insufficient funds
+    if (successfulSwaps === 0 && wallets.length > 0) {
+      console.log(`[bot ${userId}] no successful swaps this cycle, checking wallet balances...`);
+      // Check if all wallets have insufficient SOL
+      const web3 = require('@solana/web3.js');
+      const rpcEndpoint = user.rpc || process.env.SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
+      const connection = new web3.Connection(rpcEndpoint, { commitment: 'confirmed' });
+      let hasEnoughSol = false;
+      const requiredSol = minBuy + 0.002; // minBuy + estimated fees
+
+      for (const wallet of wallets) {
+        try {
+          const balance = await connection.getBalance(wallet.publicKey);
+          const solBalance = balance / web3.LAMPORTS_PER_SOL;
+          console.log(`[bot ${userId}] wallet ${wallet.publicKey.toBase58()}: ${solBalance.toFixed(6)} SOL (required: ${requiredSol.toFixed(6)} SOL)`);
+
+          if (solBalance >= requiredSol) {
+            hasEnoughSol = true;
+            break;
+          }
+        } catch (err) {
+          console.warn(`[bot ${userId}] failed to check balance for wallet ${wallet.publicKey.toBase58()}:`, err?.message || err);
+        }
+      }
+
+      if (!hasEnoughSol) {
+        console.log(`[bot ${userId}] stopping: insufficient SOL across all wallets (min required: ${requiredSol.toFixed(6)} SOL)`);
+        heartbeat(controller, {
+          lastError: {
+            ts: Date.now(),
+            message: `Bot stopped: Insufficient SOL across all wallets. Minimum required: ${requiredSol.toFixed(6)} SOL per wallet.`
+          }
+        });
+        controller.stop = true;
+        await User.findByIdAndUpdate(userId, { running: false }).catch(() => {});
+        return;
+      } else {
+        console.log(`[bot ${userId}] at least one wallet has sufficient SOL, continuing...`);
+      }
     }
+
+    heartbeat(controller, { phase: 'cooldown' });
+    // Quick cooldown: 1-3 seconds between cycles
+    const cooldownMs = 1000 + Math.random() * 2000;
+    await sleep(cooldownMs);
+    if (!controller || controller.stop) return;
   }
 }
 

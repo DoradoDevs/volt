@@ -183,6 +183,7 @@ const getDashboard = async (req, res) => {
   res.json({
     email: user.email,
     tier: user.tier,
+    volume: user.volume || 0,
     referralCode: user.referralCode,
     earnedRewards: (user.earnedRewards || 0) / web3.LAMPORTS_PER_SOL,
     sourceAddress,
@@ -463,16 +464,13 @@ const depositWithdraw = async (req, res) => {
     })
   );
 
-  const v0 = await connection.compileMessageV0({
-    payerKey: sourceKp.publicKey,
-    instructions: tx.instructions,
-    recentBlockhash: (await connection.getLatestBlockhash()).blockhash,
-  });
-  const vtx = new web3.VersionedTransaction(v0);
-  vtx.sign([sourceKp]);
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+  tx.recentBlockhash = blockhash;
+  tx.feePayer = sourceKp.publicKey;
+  tx.sign(sourceKp);
 
-  const sig = await connection.sendRawTransaction(vtx.serialize(), { skipPreflight: true });
-  await connection.confirmTransaction(sig, 'confirmed');
+  const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true });
+  await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
 
   let feeTxid = null;
   try {
