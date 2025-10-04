@@ -96,19 +96,106 @@ const Button = ({ tone = 'primary', style, disabled, children, ...props }) => {
   );
 };
 
-const ModePicker = ({ value, onChange, options }) => (
-  <select
-    value={value}
-    onChange={(e) => onChange(e.target.value)}
-    style={{ ...baseInput, appearance: 'none', WebkitAppearance: 'none', paddingRight: 28 }}
-  >
-    {options.map((opt) => (
-      <option key={opt.value} value={opt.value}>
-        {opt.label}
-      </option>
-    ))}
-  </select>
-);
+const ModePicker = ({ value, onChange, options }) => {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [open]);
+
+  const selected = options.find((opt) => opt.value === value);
+  const modeDescriptions = {
+    pure: 'Buy â†’ Sell full amount. Pure volume generation.',
+    growth: 'Buy â†’ Sell 90%. Accumulates tokens while generating volume.',
+    moonshot: 'Buy only, no selling. Pump price and accumulate.',
+    human: 'Random wallet groups with delayed sells. Looks organic.',
+    bump: 'Continuous buy/sell cycles. Steady bumping.',
+  };
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        style={{
+          ...baseInput,
+          cursor: 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          textAlign: 'left',
+        }}
+      >
+        <span>{selected?.label || 'Select Mode'}</span>
+        <span style={{ fontSize: 12, transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>â–¼</span>
+      </button>
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            marginTop: 4,
+            background: '#1a0d2e',
+            border: '1px solid rgba(123,104,238,0.5)',
+            borderRadius: 10,
+            overflow: 'hidden',
+            zIndex: 1000,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+          }}
+        >
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                border: 'none',
+                background: opt.value === value ? 'rgba(123,104,238,0.2)' : 'transparent',
+                color: palette.text,
+                textAlign: 'left',
+                cursor: 'pointer',
+                transition: 'background 0.15s',
+                display: 'grid',
+                gap: 4,
+              }}
+              onMouseEnter={(e) => {
+                if (opt.value !== value) {
+                  e.currentTarget.style.background = 'rgba(123,104,238,0.12)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (opt.value !== value) {
+                  e.currentTarget.style.background = 'transparent';
+                }
+              }}
+            >
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{opt.label}</div>
+              <div style={{ fontSize: 12, color: palette.hint, lineHeight: 1.4 }}>
+                {modeDescriptions[opt.value] || ''}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const HelpDialog = ({ onClose }) => (
   <div
@@ -400,7 +487,7 @@ const BotControls = ({ running, onStatusChange }) => {
   }, [activeSignature, activeWallets]);
 
   const statusText = (status) => {
-    if (status === 'saving') return 'Saving…';
+    if (status === 'saving') return 'Savingï¿½';
     if (status === 'saved') return 'Saved';
     if (status === 'blocked') return 'Fix the highlighted fields to save';
     if (status === 'error') return 'Auto-save failed. Use Save Settings.';
@@ -570,7 +657,7 @@ const BotControls = ({ running, onStatusChange }) => {
   if (loading) {
     return (
       <div style={{ margin: '16px 0' }}>
-        <em>Loading bot settings…</em>
+        <em>Loading bot settingsï¿½</em>
       </div>
     );
   }
@@ -608,7 +695,7 @@ const BotControls = ({ running, onStatusChange }) => {
                 onClick={handleSaveRpc}
                 disabled={savingRpc}
               >
-                {savingRpc ? 'Saving…' : 'Save RPC'}
+                {savingRpc ? 'Savingï¿½' : 'Save RPC'}
               </Button>
             </div>
           </Row>
@@ -655,24 +742,24 @@ const BotControls = ({ running, onStatusChange }) => {
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
             <Button onClick={handleSaveSettings} disabled={saving}>
-              {saving ? 'Saving…' : 'Save Settings'}
+              {saving ? 'Savingï¿½' : 'Save Settings'}
             </Button>
             <Button onClick={handleStart} disabled={starting}>
-              {starting ? 'Starting…' : 'Start Bot'}
+              {starting ? 'Startingï¿½' : 'Start Bot'}
             </Button>
             <Button
               tone="neutral"
               onClick={handleSellAll}
               disabled={sellingAll}
             >
-              {sellingAll ? 'Triggering…' : 'Sell All Tokens to SOL'}
+              {sellingAll ? 'Triggeringï¿½' : 'Sell All Tokens to SOL'}
             </Button>
             <Button
               tone="danger"
               onClick={handleStop}
               disabled={!running || stopping}
             >
-              {stopping ? 'Stopping…' : 'Stop Bot'}
+              {stopping ? 'Stoppingï¿½' : 'Stop Bot'}
             </Button>
             <span style={{ fontSize: 12, color: palette.hint }}>
               {statusText(autoSaveStatus)}

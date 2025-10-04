@@ -19,37 +19,60 @@ const HelpModal = ({ onClose }) => (
     <div
       style={{
         background: '#2a1a40',
-        padding: '28px 32px', // more padding for spacing
+        padding: '28px 32px',
         borderRadius: 12,
-        maxWidth: 600,
+        maxWidth: 700,
+        maxHeight: '90vh',
         width: '90%',
         color: '#E6E6FA',
-        lineHeight: 1.5, // better spacing
+        lineHeight: 1.5,
+        overflowY: 'auto',
       }}
     >
-      <h3 style={{ marginTop: 0 }}>How VolT Works</h3>
+      <h3 style={{ marginTop: 0 }}>VolT Volume Bot Guide</h3>
 
-      <p><strong>Modes</strong></p>
-      <ul>
-        <li><strong>Pure:</strong> Buys then sells full amount each cycle (tight loops).</li>
-        <li><strong>Growth:</strong> Buys then sells ~90% to accumulate small bags over time.</li>
-        <li><strong>Moonshot:</strong> Buys only; no auto-sell.</li>
-        <li><strong>Human:</strong> Randomized squads buy quickly, then staggered sells to mimic human activity.</li>
-        <li><strong>Bump:</strong> Continuous buy/sell across all wallets (steady bumps).</li>
+      <p><strong>🎯 Quick Start</strong></p>
+      <ol style={{ marginLeft: -20, lineHeight: 1.8 }}>
+        <li><strong>Deposit SOL:</strong> Fund your deposit wallet (shown in Funds tab)</li>
+        <li><strong>Add Wallets:</strong> Create 3-10 bot wallets in the Wallets tab</li>
+        <li><strong>Distribute:</strong> Split SOL evenly from deposit to bot wallets (e.g., 0.05 SOL each)</li>
+        <li><strong>Configure:</strong> Set token mint, buy amounts (0.01-0.05 SOL), delays (500-2000ms)</li>
+        <li><strong>Select Mode:</strong> Choose bot strategy (see below)</li>
+        <li><strong>Start Bot:</strong> Click Start and monitor activity in the Activity tab</li>
+      </ol>
+
+      <p><strong>📊 Bot Modes Explained</strong></p>
+      <ul style={{ lineHeight: 1.8 }}>
+        <li><strong>Pure:</strong> Buy → Sell full amount. Best for pure volume generation.</li>
+        <li><strong>Growth:</strong> Buy → Sell 90%. Slowly accumulates tokens while generating volume.</li>
+        <li><strong>Moonshot:</strong> Buy only, no selling. Use to pump price and accumulate.</li>
+        <li><strong>Human:</strong> Random wallet groups buy, wait 15-30s, then sell. Looks organic.</li>
+        <li><strong>Bump:</strong> Like Pure but continuous cycles. Good for steady bumping.</li>
       </ul>
 
-      <p><strong>Deposits</strong><br />
-        Your account has a deposit address (primary wallet) created automatically. Send SOL there.  
-        You can generate new deposit addresses; older ones remain usable.
-      </p>
+      <p><strong>💰 Managing Funds</strong></p>
+      <ul style={{ lineHeight: 1.8 }}>
+        <li><strong>Distribute:</strong> Send equal SOL from deposit to all bot wallets</li>
+        <li><strong>Consolidate:</strong> Sweep SOL from all bot wallets back to deposit wallet</li>
+        <li><strong>Withdraw:</strong> Send SOL from deposit to external wallet (type "MAX" for all)</li>
+        <li><strong>Close Accounts:</strong> Reclaim rent from empty token accounts (~0.002 SOL each)</li>
+      </ul>
 
-      <p><strong>Withdrawals</strong><br />
-        From the Wallets page, withdraw SOL from your deposit wallet to any address. Use “MAX” for full balance.
-      </p>
+      <p><strong>🏆 Fee Tiers & Referrals</strong></p>
+      <ul style={{ lineHeight: 1.8 }}>
+        <li>Base fee: 0.1% of volume. Discounts: Bronze 10%, Silver 20%, Gold 30%, Diamond 50%</li>
+        <li>Unlock tiers with volume: Bronze 100 SOL, Silver 250, Gold 500, Diamond 1000+</li>
+        <li>Refer friends: Earn 10-25% of their fees as rewards (higher tiers = more rewards)</li>
+      </ul>
 
-      <p><strong>Tier Discounts</strong><br />
-        Bronze 10%, Silver 20%, Gold 30%, Diamond 50%.
-      </p>
+      <p><strong>⚡ Pro Tips</strong></p>
+      <ul style={{ lineHeight: 1.8 }}>
+        <li>Use Human mode for the most organic-looking volume</li>
+        <li>Keep 3-10 wallets active for best results</li>
+        <li>Start with small amounts (0.01-0.02 SOL) to test</li>
+        <li>Check Activity tab to monitor trades and catch errors early</li>
+        <li>Run "Close Accounts" periodically to reclaim rent from empty token accounts</li>
+      </ul>
 
       <div style={{ textAlign: 'right', marginTop: 18 }}>
         <button

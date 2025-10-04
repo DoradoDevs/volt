@@ -80,6 +80,8 @@ async function trySwap({ user, walletKeypair, inputMint, outputMint, uiAmount, m
       return result;
     } catch (err) {
       lastError = err;
+      const errMsg = err?.message || String(err);
+
       if (ctl) {
         const payload = {
           ts: Date.now(),
@@ -91,18 +93,29 @@ async function trySwap({ user, walletKeypair, inputMint, outputMint, uiAmount, m
           amount: Number(uiAmount) || 0,
           success: false,
           attempt,
-          error: err?.message || String(err),
+          error: errMsg,
         };
         ctl.lastAction = payload;
         ctl.lastError = payload;
       }
+
+      console.warn(`[bot ${user._id}] ${action} attempt ${attempt + 1} failed for ${walletAddress}: ${errMsg}`);
       await logSwapError(user._id, walletAddress, context, err, uiAmount);
+
+      // Don't retry if it's a known unrecoverable error
+      if (errMsg.includes('Slippage tolerance exceeded') ||
+          errMsg.includes('insufficient funds') ||
+          errMsg.includes('0x1')) { // Program error
+        console.warn(`[bot ${user._id}] unrecoverable error, skipping retries`);
+        break;
+      }
+
       await sleep(400 * Math.pow(2, attempt));
       if (!ctl || ctl.stop) break;
     }
   }
   if (lastError) {
-    console.error(`[bot ${user._id}] swap failed:`, lastError?.message || lastError);
+    console.error(`[bot ${user._id}] swap failed after retries:`, lastError?.message || lastError);
   }
   return null;
 }
@@ -181,7 +194,7 @@ async function botLoop(userId, controller) {
             if (buy && buy.output.uiAmount > 0) {
               await sleep(randomDelay());
               if (controller.stop) return;
-              await trySwap({
+              const sell = await trySwap({
                 user,
                 walletKeypair: wallet,
                 inputMint: tokenMint,
@@ -191,6 +204,12 @@ async function botLoop(userId, controller) {
                 action: 'bot-sell',
                 controller,
               });
+              // If sell failed, log it but continue
+              if (!sell) {
+                console.warn(`[bot ${user._id}] pure mode: sell failed for wallet ${wallet.publicKey.toBase58()}, continuing to next wallet`);
+              }
+            } else {
+              console.warn(`[bot ${user._id}] pure mode: buy failed or returned 0 output, skipping sell`);
             }
             await sleep(randomDelay());
             if (controller.stop) return;
@@ -264,6 +283,7 @@ async function botLoop(userId, controller) {
           const group = shuffled.slice(0, groupSize);
           const sells = [];
 
+          // Buy phase: quick succession with small random delays (0-5s)
           for (const wallet of group) {
             if (controller.stop) return;
             const buy = await trySwap({
@@ -284,9 +304,11 @@ async function botLoop(userId, controller) {
             if (controller.stop) return;
           }
 
+          // Wait phase: 15-30 seconds before selling (humans think/wait)
           await sleep(15000 + Math.random() * 15000);
           if (controller.stop) return;
 
+          // Sell phase: staggered sells with 3-8s delays (looks more organic)
           for (const sell of sells) {
             if (controller.stop) return;
             await trySwap({
@@ -299,6 +321,11 @@ async function botLoop(userId, controller) {
               action: 'bot-sell',
               controller,
             });
+            // Add delay between sells to look more natural
+            if (sells.indexOf(sell) < sells.length - 1) {
+              await sleep(3000 + Math.random() * 5000);
+              if (controller.stop) return;
+            }
           }
           break;
         }
