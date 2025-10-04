@@ -127,12 +127,33 @@ const FundsManager = ({ sourceAddress, balance, onChanged }) => {
     try {
       const { data } = await api.post('/funds/consolidate');
       if (!data.txids || data.txids.length === 0) {
-        setMessage('success', data.message || 'Nothing to consolidate.');
+        // Show details about what was skipped
+        const skipped = (data.results || []).filter(r => r.status === 'skipped');
+        const failed = (data.results || []).filter(r => r.status === 'failed');
+        let msg = data.message || 'Nothing to consolidate.';
+        if (skipped.length) {
+          msg += ` (${skipped.length} wallet(s) skipped: ${skipped.map(s => s.reason).join(', ')})`;
+        }
+        if (failed.length) {
+          msg += ` (${failed.length} failed)`;
+        }
+        setMessage('success', msg);
       } else {
         const parts = ['Moved from ' + data.txids.length + ' wallet(s)'];
         if (typeof data.totalSol === 'number') {
           parts.push('Total SOL: ' + data.totalSol.toFixed(4));
         }
+
+        // Show any failures or skips
+        const failed = (data.results || []).filter(r => r.status === 'failed');
+        const skipped = (data.results || []).filter(r => r.status === 'skipped');
+        if (skipped.length) {
+          parts.push(`${skipped.length} skipped`);
+        }
+        if (failed.length) {
+          parts.push(`${failed.length} failed`);
+        }
+
         parts.push('Primary TX: ' + data.txid);
         if (data.feeTxid) parts.push('Fee TX: ' + data.feeTxid);
         setMessage('success', parts.join(' | '));

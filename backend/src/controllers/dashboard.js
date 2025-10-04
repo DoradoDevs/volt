@@ -547,30 +547,56 @@ const consolidate = async (req, res) => {
   const connection = new web3.Connection(user.rpc || process.env.SOLANA_RPC);
 
   const txids = [];
+  const results = [];
   let totalLamports = 0;
 
+  // Fee buffer: typical Solana transfer fee is ~5000 lamports
+  const FEE_BUFFER = 5000;
+  const MIN_BALANCE = 10000; // minimum balance to bother consolidating
+
   for (const sub of subKps) {
-    const balanceLamports = await withRetry(() => connection.getBalance(sub.publicKey));
-    if (balanceLamports <= 0) continue;
+    const walletAddr = sub.publicKey.toString();
+    try {
+      const balanceLamports = await withRetry(() => connection.getBalance(sub.publicKey));
 
-    const tx = new web3.Transaction().add(web3.SystemProgram.transfer({
-      fromPubkey: sub.publicKey,
-      toPubkey: sourceKp.publicKey,
-      lamports: balanceLamports
-    }));
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-    tx.recentBlockhash = blockhash;
-    tx.feePayer = sub.publicKey;
-    tx.sign(sub);
+      if (balanceLamports <= MIN_BALANCE) {
+        results.push({ wallet: walletAddr, status: 'skipped', reason: 'balance too low', balance: balanceLamports });
+        continue;
+      }
 
-    const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true });
-    await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
-    txids.push(sig);
-    totalLamports += balanceLamports;
+      // Reserve SOL for transaction fee
+      const transferAmount = balanceLamports - FEE_BUFFER;
+
+      if (transferAmount <= 0) {
+        results.push({ wallet: walletAddr, status: 'skipped', reason: 'insufficient for fee', balance: balanceLamports });
+        continue;
+      }
+
+      const tx = new web3.Transaction().add(web3.SystemProgram.transfer({
+        fromPubkey: sub.publicKey,
+        toPubkey: sourceKp.publicKey,
+        lamports: transferAmount
+      }));
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = sub.publicKey;
+      tx.sign(sub);
+
+      const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true });
+      await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
+      txids.push(sig);
+      totalLamports += transferAmount;
+      results.push({ wallet: walletAddr, status: 'success', txid: sig, transferred: transferAmount });
+      console.log(`[consolidate] ${walletAddr}: transferred ${transferAmount} lamports (${(transferAmount/web3.LAMPORTS_PER_SOL).toFixed(6)} SOL)`);
+    } catch (err) {
+      const errMsg = err?.message || String(err);
+      console.error(`[consolidate] ${walletAddr} failed:`, errMsg);
+      results.push({ wallet: walletAddr, status: 'failed', error: errMsg });
+    }
   }
 
   if (!txids.length) {
-    return res.json({ txid: null, txids: [], message: 'Nothing to consolidate' });
+    return res.json({ txid: null, txids: [], results, message: 'Nothing to consolidate' });
   }
 
   let feeTxid = null;
@@ -581,7 +607,7 @@ const consolidate = async (req, res) => {
     console.error('[fees] consolidate fee failed:', feeErr?.message || feeErr);
   }
 
-  res.json({ txid: txids[0], txids, feeTxid, totalSol });
+  res.json({ txid: txids[0], txids, feeTxid, totalSol, results });
 };
 
 const sellAll = async (req, res) => {
