@@ -2,8 +2,9 @@
 import axios from 'axios';
 
 const api = axios.create({
-  // If REACT_APP_API_BASE is set, use it; otherwise default to :5000 at root.
-  baseURL: process.env.REACT_APP_API_BASE || 'http://localhost:5000',
+  // In production (served via nginx), use relative URLs
+  // In development, connect to localhost:5000
+  baseURL: process.env.REACT_APP_API_BASE || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000'),
 });
 
 // Attach token automatically
