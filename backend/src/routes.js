@@ -34,6 +34,7 @@ const {
   startBotController,
   stopBotController,
   updateSettings,
+  updateDisplayName,
   getSettings,
   // portfolio
   portfolio,
@@ -80,6 +81,7 @@ router.post('/funds/close-accounts', authRequired, closeAccounts);
 router.post('/bot/start', authRequired, startBotController);
 router.post('/bot/stop', authRequired, stopBotController);
 router.post('/settings/update', authRequired, updateSettings);
+router.post('/settings/display-name', authRequired, updateDisplayName);
 router.get('/settings/get', authRequired, getSettings);
 
 /** ---------- Activity + health ---------- **/

@@ -58,13 +58,22 @@ const signup = async (req, res) => {
   res.json({ ok: true });
 };
 
-/** POST /login { email } */
+/** POST /login { email } - auto-creates account if doesn't exist */
 const login = async (req, res) => {
   const email = normalizeEmail(req.body.email);
   if (!email) return res.status(400).json({ error: 'Email required' });
 
-  const user = await User.findOne({ email });
-  if (!user) return res.status(404).json({ error: 'No account found, please sign up' });
+  let user = await User.findOne({ email });
+
+  // Auto-create account if it doesn't exist
+  if (!user) {
+    user = new User({
+      email,
+      referralCode: generateReferralCode(),
+      verified: false,
+    });
+    await user.save();
+  }
 
   await ensureDepositWallet(user);
   await issueCodeAndEmail(user, email);

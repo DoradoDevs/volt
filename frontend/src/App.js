@@ -14,16 +14,32 @@ import './styles/App.css';
 const App = () => {
   const [user, setUser] = useState(null);
   const [email, setEmail] = useState(null);
+  const [displayName, setDisplayName] = useState('');
   const [bootstrapping, setBootstrapping] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) { setBootstrapping(false); return; }
-    api.get('/auth/me')
-      .then((res) => setUser(res.data))
-      .catch(() => { localStorage.removeItem('token'); setUser(null); })
+
+    // Fetch user info and dashboard to get displayName
+    Promise.all([
+      api.get('/auth/me'),
+      api.get('/dashboard')
+    ])
+      .then(([meRes, dashRes]) => {
+        setUser(meRes.data);
+        setDisplayName(dashRes.data?.displayName || '');
+      })
+      .catch(() => {
+        localStorage.removeItem('token');
+        setUser(null);
+      })
       .finally(() => setBootstrapping(false));
   }, []);
+
+  const handleDisplayNameChange = (newDisplayName) => {
+    setDisplayName(newDisplayName);
+  };
 
   if (bootstrapping) {
     return (
@@ -37,12 +53,12 @@ const App = () => {
     <Router>
       <ErrorBoundary>
         <div className="App" style={{ backgroundColor: theme.colors.bgPrimary, minHeight: '100vh', color: theme.colors.text, position:'relative' }}>
-          {user && <Header email={user.email} />}
+          {user && <Header email={user.email} displayName={displayName} onDisplayNameChange={handleDisplayNameChange} />}
 
           <Routes>
             <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login setEmail={setEmail} />} />
-            <Route path="/verify" element={user ? <Navigate to="/dashboard" /> : <Verify setUser={setUser} email={email} />} />
-            <Route path="/signup" element={user ? <Navigate to="/dashboard" /> : <Signup />} />
+            <Route path="/verify" element={user ? <Navigate to="/dashboard" /> : <Verify setUser={setUser} email={email} onDisplayNameChange={handleDisplayNameChange} />} />
+            <Route path="/signup" element={<Navigate to="/login" />} />
             <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
             <Route path="*" element={<Navigate to="/login" />} />
           </Routes>

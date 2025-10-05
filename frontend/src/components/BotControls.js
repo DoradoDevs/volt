@@ -119,7 +119,7 @@ const ModePicker = ({ value, onChange, options }) => {
     pure: 'Buy → Sell full amount. Pure volume generation.',
     growth: 'Buy → Sell 90%. Accumulates tokens while generating volume.',
     moonshot: 'Buy only, no selling. Pump price and accumulate.',
-    human: 'Random wallet groups with delayed sells. Looks organic.',
+    human: 'Fully randomized patterns. Recommended delay: 5000-60000ms.',
   };
 
   return (
@@ -287,6 +287,7 @@ const BotControls = ({ running, onStatusChange }) => {
   const [preflight, setPreflight] = useState({ ok: true, issues: [] });
   const [autoSaveStatus, setAutoSaveStatus] = useState('idle');
   const [walletSaveStatus, setWalletSaveStatus] = useState('idle');
+  const [refreshingBalances, setRefreshingBalances] = useState(false);
 
   const loadedRef = useRef(false);
   const savedSettingsRef = useRef('');
@@ -588,8 +589,19 @@ const BotControls = ({ running, onStatusChange }) => {
     }
     setStarting(true);
     try {
+      // Save current settings first to ensure mode and other values are persisted
+      const payload = {
+        tokenMint,
+        minBuy: parseFloat(minBuy) || 0,
+        maxBuy: parseFloat(maxBuy) || 0,
+        minDelay: parseFloat(minDelay) || 0,
+        maxDelay: parseFloat(maxDelay) || 0,
+        mode,
+      };
+      await api.post('/settings/update', payload);
+
+      // Now fetch to verify and run preflight checks
       const { data } = await api.get('/settings/get');
-      applySettings(data || {});
       setPreflight(data?.preflight || { ok: true, issues: [] });
       if (!data?.preflight?.ok) {
         const lines = ['Bot configuration incomplete.'];
@@ -656,6 +668,29 @@ const BotControls = ({ running, onStatusChange }) => {
         ? prev.filter((entry) => entry !== address)
         : prev.concat(address)
     );
+  };
+
+  const handleRefreshBalances = async () => {
+    setRefreshingBalances(true);
+    try {
+      const res = await api.get('/wallets/list');
+      const balances = {};
+      const addresses = [];
+      (res.data?.wallets || []).forEach((wallet) => {
+        balances[wallet.address] = Number(wallet.balanceSOL || 0);
+        addresses.push(wallet.address);
+      });
+      setWalletBalances(balances);
+      setAllWallets((prev) => {
+        const next = new Set([...(prev || []), ...addresses]);
+        return Array.from(next);
+      });
+    } catch (err) {
+      console.error('Failed to refresh balances', err);
+      alert('Failed to refresh balances. Try again.');
+    } finally {
+      setRefreshingBalances(false);
+    }
   };
 
   if (loading) {
@@ -772,7 +807,17 @@ const BotControls = ({ running, onStatusChange }) => {
       <div style={{ height: 14 }} />
 
       <Panel>
-        <h3 style={{ margin: 0, marginBottom: 8 }}>Pick Wallets for the Bot</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <h3 style={{ margin: 0 }}>Pick Wallets for the Bot</h3>
+          <Button
+            tone="neutral"
+            onClick={handleRefreshBalances}
+            disabled={refreshingBalances}
+            style={{ height: 32, padding: '0 12px', fontSize: 13 }}
+          >
+            {refreshingBalances ? 'Refreshing...' : '↻ Refresh Balances'}
+          </Button>
+        </div>
         {(!allWallets || allWallets.length === 0) ? (
           <p style={{ margin: 0 }}>No wallets yet. Create wallets from the Wallets tab.</p>
         ) : (

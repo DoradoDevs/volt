@@ -10,6 +10,7 @@ const {
 } = require('../services/solana');
 
 const { startBot, stopBot } = require('../services/bot');
+const { canUserPerformAction, getTierLimits, updateUserTier } = require('../config/tiers');
 
 const TOKEN_PROGRAM_ID = new web3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 
@@ -168,6 +169,10 @@ const getDashboard = async (req, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
+  // Update tier based on volume
+  await updateUserTier(user);
+  await user.save();
+
   let sourceAddress = '';
   let sourceBalance = 0;
   try {
@@ -179,10 +184,13 @@ const getDashboard = async (req, res) => {
   } catch (_) {}
 
   const preflight = validateBotConfig(user);
+  const tierLimits = getTierLimits(user.tier);
 
   res.json({
     email: user.email,
+    displayName: user.displayName || '',
     tier: user.tier,
+    tierLimits,
     volume: user.volume || 0,
     referralCode: user.referralCode,
     earnedRewards: (user.earnedRewards || 0) / web3.LAMPORTS_PER_SOL,
@@ -264,7 +272,23 @@ const setReferrer = async (req, res) => {
 const getTier = async (req, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  res.json({ tier: user.tier });
+
+  await updateUserTier(user);
+  await user.save();
+
+  const tierLimits = getTierLimits(user.tier);
+  const { getAllTiers } = require('../config/tiers');
+  const allTiers = getAllTiers();
+
+  res.json({
+    currentTier: user.tier,
+    limits: tierLimits,
+    volume: user.volume || 0,
+    allTiers: Object.keys(allTiers).map(key => ({
+      tier: key,
+      ...allTiers[key]
+    }))
+  });
 };
 
 /* -------------------------- Wallet management ---------------------- */
@@ -293,7 +317,14 @@ const manageWallets = async (req, res) => {
 const addOneWallet = async (_req, res) => {
   const user = await User.findById(_req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  if (user.subWalletsEncrypted.length >= 100) return res.status(400).json({ error: 'Max 100 sub-wallets' });
+
+  // Check tier limits
+  if (!canUserPerformAction(user, 'add_wallet')) {
+    const tierLimits = getTierLimits(user.tier);
+    return res.status(403).json({
+      error: `Wallet limit reached for ${tierLimits.name} tier (${tierLimits.maxWallets} max). Trade more volume to upgrade!`
+    });
+  }
 
   const kp = web3.Keypair.generate();
   user.subWalletsEncrypted.push(encrypt(bs58.encode(kp.secretKey)));
@@ -422,7 +453,17 @@ const setActiveWallets = async (req, res) => {
     try { allowed.add(getKeypair(enc).publicKey.toString()); } catch (_) {}
   }
 
-  user.activeWallets = addresses.filter(a => allowed.has(a));
+  const validAddresses = addresses.filter(a => allowed.has(a));
+
+  // Check tier limits for active wallets
+  if (!canUserPerformAction(user, 'set_active_wallets', validAddresses)) {
+    const tierLimits = getTierLimits(user.tier);
+    return res.status(403).json({
+      error: `Too many active wallets for ${tierLimits.name} tier. Max ${tierLimits.maxActiveWallets} wallets can be active.`
+    });
+  }
+
+  user.activeWallets = validAddresses;
   await user.save();
   res.json({ ok: true, active: user.activeWallets });
 };
@@ -772,10 +813,44 @@ const stopBotController = async (req, res) => {
 const updateSettings = async (req, res) => {
   const user = await User.findById(req.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
+
+  // Check mode restriction
+  if (req.body.mode && !canUserPerformAction(user, 'use_mode', req.body.mode)) {
+    const tierLimits = getTierLimits(user.tier);
+    return res.status(403).json({
+      error: `Mode "${req.body.mode}" not available for ${tierLimits.name} tier. Available modes: ${tierLimits.features.botModes.join(', ')}`
+    });
+  }
+
+  // Check custom RPC restriction
+  if (req.body.rpc && req.body.rpc.trim() && !canUserPerformAction(user, 'use_custom_rpc')) {
+    const tierLimits = getTierLimits(user.tier);
+    return res.status(403).json({
+      error: `Custom RPC not available for ${tierLimits.name} tier. Upgrade to Bronze or higher!`
+    });
+  }
+
   const fields = ['tokenMint', 'rpc', 'minBuy', 'maxBuy', 'minDelay', 'maxDelay', 'mode'];
   for (const f of fields) if (typeof req.body[f] !== 'undefined') user[f] = req.body[f];
   await user.save();
   res.json({ message: 'Updated' });
+};
+
+const updateDisplayName = async (req, res) => {
+  const user = await User.findById(req.userId);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const { displayName } = req.body;
+
+  // Validate display name (max 50 chars, trim whitespace)
+  const trimmed = String(displayName || '').trim();
+  if (trimmed.length > 50) {
+    return res.status(400).json({ error: 'Display name must be 50 characters or less' });
+  }
+
+  user.displayName = trimmed;
+  await user.save();
+  res.json({ displayName: user.displayName });
 };
 
 const getSettings = async (req, res) => {
@@ -913,7 +988,7 @@ module.exports = {
   // funds
   depositWithdraw, distribute, consolidate, sellAll, closeAccounts,
   // bot + settings
-  startBotController, stopBotController, updateSettings, getSettings,
+  startBotController, stopBotController, updateSettings, updateDisplayName, getSettings,
   // portfolio
   portfolio,
   // activity + health
