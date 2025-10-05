@@ -11,21 +11,16 @@ import './styles/App.css';
 
 const App = () => {
   const [user, setUser] = useState(null);
-  const [displayName, setDisplayName] = useState('');
   const [bootstrapping, setBootstrapping] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) { setBootstrapping(false); return; }
 
-    // Fetch user info and dashboard to get displayName
-    Promise.all([
-      api.get('/auth/me'),
-      api.get('/dashboard')
-    ])
-      .then(([meRes, dashRes]) => {
-        setUser(meRes.data);
-        setDisplayName(dashRes.data?.displayName || '');
+    // Fetch user info
+    api.get('/auth/me')
+      .then((res) => {
+        setUser(res.data);
       })
       .catch(() => {
         localStorage.removeItem('token');
@@ -33,10 +28,6 @@ const App = () => {
       })
       .finally(() => setBootstrapping(false));
   }, []);
-
-  const handleDisplayNameChange = (newDisplayName) => {
-    setDisplayName(newDisplayName);
-  };
 
   if (bootstrapping) {
     return (
@@ -50,7 +41,7 @@ const App = () => {
     <Router>
       <ErrorBoundary>
         <div className="App" style={{ backgroundColor: theme.colors.bgPrimary, minHeight: '100vh', color: theme.colors.text, position:'relative' }}>
-          {user && <Header username={user.username} displayName={displayName} onDisplayNameChange={handleDisplayNameChange} />}
+          {user && <Header username={user.username} />}
 
           <Routes>
             <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login setUsername={setUser} />} />
