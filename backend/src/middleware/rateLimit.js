@@ -1,5 +1,5 @@
 // backend/src/middleware/ratelimit.js
-const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
+const { rateLimit } = require('express-rate-limit');
 
 // Login/Signup/Verify limiter
 const authLimiter = rateLimit({
@@ -7,8 +7,9 @@ const authLimiter = rateLimit({
   limit: 5,                // 5 requests/min per IP
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  // IMPORTANT: use helper so IPv6 can't bypass
-  keyGenerator: ipKeyGenerator,
+  // Use X-Forwarded-For header from nginx proxy
+  keyGenerator: (req) => req.ip,
+  skip: (req) => !req.ip, // Skip if no IP
 });
 
 module.exports = { authLimiter };
