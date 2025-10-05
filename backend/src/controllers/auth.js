@@ -67,9 +67,10 @@ const login = async (req, res) => {
 
   // Auto-create account if it doesn't exist
   if (!user) {
+    const referralCode = crypto.randomBytes(3).toString('hex');
     user = new User({
       email,
-      referralCode: generateReferralCode(),
+      referralCode,
       verified: false,
     });
     await user.save();
