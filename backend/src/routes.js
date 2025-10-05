@@ -1,7 +1,7 @@
 // backend/src/routes.js
 const express = require('express');
 
-const { authLimiter } = require('./middleware/ratelimit');
+const { authLimiter } = require('./middleware/rateLimit');
 const authRequired = require('./middleware/auth');
 
 // Auth controllers
