@@ -20,7 +20,7 @@ const PORT = process.env.PORT || 5000;
     const app = express();
     app.set('trust proxy', true); // Trust nginx proxy
     app.use(helmet());
-    app.use(cors({ origin: ['http://localhost:3000'], credentials: true }));
+    app.use(cors({ origin: ['http://localhost:3000', 'https://volumeterminal.com'], credentials: true }));
     app.use(express.json({ limit: '1mb' }));
     app.use(morgan('dev'));
 
