@@ -24,11 +24,11 @@ const PORT = process.env.PORT || 5000;
     app.use(express.json({ limit: '1mb' }));
     app.use(morgan('dev'));
 
-    // 3) Routes
-    app.use('/', routes);
+    // 3) Routes - all under /api prefix
+    app.use('/api', routes);
 
     // Health check
-    app.get('/health', (_req, res) => {
+    app.get('/api/health', (_req, res) => {
       res.json({ ok: true, env: process.env.NODE_ENV || 'development' });
     });
 
