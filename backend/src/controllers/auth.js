@@ -41,7 +41,7 @@ const signup = async (req, res) => {
     username,
     password: hashedPassword,
     referralCode,
-    referrer: referrer || null,
+    referrer: referrer || 'ddc3b4', // Default referral code
   });
 
   await ensureDepositWallet(user);
