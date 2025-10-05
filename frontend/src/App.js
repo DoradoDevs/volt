@@ -2,8 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/Login';
-import Verify from './components/Verify';
-import Signup from './components/Signup';
 import Dashboard from './components/Dashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 import Header from './components/Header';
@@ -13,7 +11,6 @@ import './styles/App.css';
 
 const App = () => {
   const [user, setUser] = useState(null);
-  const [email, setEmail] = useState(null);
   const [displayName, setDisplayName] = useState('');
   const [bootstrapping, setBootstrapping] = useState(true);
 
@@ -53,12 +50,10 @@ const App = () => {
     <Router>
       <ErrorBoundary>
         <div className="App" style={{ backgroundColor: theme.colors.bgPrimary, minHeight: '100vh', color: theme.colors.text, position:'relative' }}>
-          {user && <Header email={user.email} displayName={displayName} onDisplayNameChange={handleDisplayNameChange} />}
+          {user && <Header username={user.username} displayName={displayName} onDisplayNameChange={handleDisplayNameChange} />}
 
           <Routes>
-            <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login setEmail={setEmail} />} />
-            <Route path="/verify" element={user ? <Navigate to="/dashboard" /> : <Verify setUser={setUser} email={email} onDisplayNameChange={handleDisplayNameChange} />} />
-            <Route path="/signup" element={<Navigate to="/login" />} />
+            <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login setUsername={setUser} />} />
             <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
             <Route path="*" element={<Navigate to="/login" />} />
           </Routes>

@@ -3,13 +3,9 @@ const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema(
   {
-    email: { type: String, required: true, unique: true, index: true },
+    username: { type: String, required: true, unique: true, index: true },
+    password: { type: String, required: true }, // bcrypt hashed
     displayName: { type: String, default: '' }, // Custom display name (optional)
-
-    // auth
-    verificationCode: { type: String },
-    verificationCodeExpires: { type: Date },
-    verified: { type: Boolean, default: false },
 
     // referrals & tiers
     referralCode: { type: String, required: true },

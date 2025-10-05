@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import api from '../services/api';
 
-const Header = ({ email, displayName: initialDisplayName, onDisplayNameChange }) => {
+const Header = ({ username, displayName: initialDisplayName, onDisplayNameChange }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [newDisplayName, setNewDisplayName] = useState('');
   const [saving, setSaving] = useState(false);
   const [displayName, setDisplayName] = useState(initialDisplayName || '');
 
-  const username = (email || '').split('@')[0] || 'user';
-  const displayText = displayName || username;
+  const displayText = displayName || username || 'user';
 
   const handleLogout = () => {
     localStorage.removeItem('token');

@@ -5,7 +5,7 @@ const { authLimiter } = require('./middleware/rateLimit');
 const authRequired = require('./middleware/auth');
 
 // Auth controllers
-const { signup, login, verify, me } = require('./controllers/auth');
+const { signup, login, me } = require('./controllers/auth');
 
 // App controllers
 const {
@@ -48,7 +48,6 @@ const router = express.Router();
 /** ---------- Public auth (rate-limited) ---------- **/
 router.post('/signup', authLimiter, signup);
 router.post('/login', authLimiter, login);
-router.post('/verify', authLimiter, verify);
 
 /** ---------- Identity/bootstrap ---------- **/
 router.get('/auth/me', authRequired, me);

@@ -3,26 +3,38 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import theme from '../theme';
 
-const Login = ({ setEmail }) => {
-  const [localEmail, setLocalEmail] = useState('');
+const Login = ({ setUsername }) => {
+  const [localUsername, setLocalUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSignup, setIsSignup] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const normalized = localEmail.trim().toLowerCase();
-    if (!normalized) return setError('Email required');
+    const username = localUsername.trim();
+
+    if (!username || !password) {
+      return setError('Username and password required');
+    }
+
+    if (isSignup && password.length < 6) {
+      return setError('Password must be at least 6 characters');
+    }
 
     setLoading(true);
+    setError('');
+
     try {
-      await api.post('/login', { email: normalized });
-      setEmail(normalized);
-      localStorage.setItem('pendingEmail', normalized);
-      setError('');
-      navigate('/verify', { state: { email: normalized } });
+      const endpoint = isSignup ? '/signup' : '/login';
+      const { data } = await api.post(endpoint, { username, password });
+
+      localStorage.setItem('token', data.token);
+      setUsername(data.user.username);
+      navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
+      setError(err.response?.data?.error || `${isSignup ? 'Signup' : 'Login'} failed`);
     } finally {
       setLoading(false);
     }
@@ -55,10 +67,45 @@ const Login = ({ setEmail }) => {
             marginBottom: 8,
             color: theme.colors.purpleLight
           }}>VolT</h1>
-          <p style={{ margin: 0, color: theme.colors.textHint, fontSize: 14 }}>Sign in to your account</p>
+          <p style={{ margin: 0, color: theme.colors.textHint, fontSize: 14 }}>
+            {isSignup ? 'Create your account' : 'Sign in to your account'}
+          </p>
         </div>
 
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: 20 }}>
+            <label style={{
+              display: 'block',
+              marginBottom: 8,
+              fontSize: 14,
+              fontWeight: 500,
+              color: theme.colors.textLabel
+            }}>
+              Username
+            </label>
+            <input
+              type="text"
+              value={localUsername}
+              onChange={(e) => setLocalUsername(e.target.value)}
+              placeholder="username"
+              disabled={loading}
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                fontSize: 14,
+                borderRadius: theme.borderRadius.md,
+                border: `1px solid ${theme.colors.borderInput}`,
+                background: theme.colors.bgInput,
+                color: theme.colors.text,
+                outline: 'none',
+                transition: 'all 0.2s',
+                boxSizing: 'border-box'
+              }}
+              onFocus={(e) => e.target.style.borderColor = theme.colors.borderPrimary}
+              onBlur={(e) => e.target.style.borderColor = theme.colors.borderInput}
+            />
+          </div>
+
           <div style={{ marginBottom: 24 }}>
             <label style={{
               display: 'block',
@@ -67,13 +114,13 @@ const Login = ({ setEmail }) => {
               fontWeight: 500,
               color: theme.colors.textLabel
             }}>
-              Email Address
+              Password
             </label>
             <input
-              type="email"
-              value={localEmail}
-              onChange={(e) => setLocalEmail(e.target.value)}
-              placeholder="your@email.com"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={isSignup ? "minimum 6 characters" : "password"}
               disabled={loading}
               style={{
                 width: '100%',
@@ -126,7 +173,7 @@ const Login = ({ setEmail }) => {
             onMouseEnter={(e) => !loading && (e.target.style.background = theme.colors.purpleLight)}
             onMouseLeave={(e) => e.target.style.background = theme.colors.purple}
           >
-            {loading ? 'Sending Code...' : 'Continue'}
+            {loading ? (isSignup ? 'Creating Account...' : 'Signing In...') : (isSignup ? 'Sign Up' : 'Sign In')}
           </button>
         </form>
 
@@ -134,10 +181,24 @@ const Login = ({ setEmail }) => {
           marginTop: 24,
           textAlign: 'center',
           fontSize: 13,
-          color: theme.colors.textHint,
-          lineHeight: 1.5
+          color: theme.colors.textHint
         }}>
-          New user? No problem! Just enter your email and we'll send you a verification code to get started.
+          <button
+            onClick={() => {
+              setIsSignup(!isSignup);
+              setError('');
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: theme.colors.purpleLight,
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              fontSize: 13
+            }}
+          >
+            {isSignup ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+          </button>
         </div>
       </div>
     </div>
