@@ -31,7 +31,7 @@ const Login = ({ setUsername }) => {
       const { data } = await api.post(endpoint, { username, password });
 
       localStorage.setItem('token', data.token);
-      setUsername(data.user.username);
+      setUsername(data.user);
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || `${isSignup ? 'Signup' : 'Login'} failed`);
