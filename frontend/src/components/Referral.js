@@ -13,6 +13,9 @@ const Referral = ({ code, rewards, onRewardsUpdate }) => {
 
   const canClaim = Number(rewards) >= MIN_CLAIM;
 
+  // Construct referral link
+  const referralLink = `${window.location.origin}/signup?ref=${code}`;
+
   useEffect(() => {
     if (tab !== 'referred') return;
     const loadRefs = async () => {
@@ -91,9 +94,35 @@ const Referral = ({ code, rewards, onRewardsUpdate }) => {
 
       {tab === 'summary' && (
         <div style={{ display: 'grid', gap: 12, maxWidth: 680 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div>Your Referral Code: <b>{code}</b></div>
-            <button onClick={() => navigator.clipboard.writeText(code)}>Copy</button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 14, fontWeight: 500 }}>Your Referral Link:</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type='text'
+                value={referralLink}
+                readOnly
+                style={{
+                  padding: '6px 8px',
+                  flex: 1,
+                  background: 'rgba(123,104,238,0.1)',
+                  border: '1px solid rgba(123,104,238,0.3)',
+                  borderRadius: 4,
+                  fontSize: 13,
+                  color: '#E6E6FA'
+                }}
+                onClick={(e) => e.target.select()}
+              />
+              <button onClick={() => {
+                navigator.clipboard.writeText(referralLink);
+                setStatus({ type: 'success', message: 'Referral link copied!' });
+                setTimeout(() => setStatus(null), 2000);
+              }}>
+                Copy Link
+              </button>
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>
+              Your code: <b>{code}</b>
+            </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

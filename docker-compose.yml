@@ -12,8 +12,7 @@ services:
       - mongodb_data:/data/db
     networks:
       - volt-network
-    ports:
-      - "27017:27017"
+    # Port removed - MongoDB only accessible within Docker network for security
 
   backend:
     build:

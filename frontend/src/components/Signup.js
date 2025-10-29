@@ -1,14 +1,23 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import theme from '../theme';
 
 const Signup = () => {
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [referrer, setReferrer] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  // Auto-fill referral code from URL parameter
+  useEffect(() => {
+    const refCode = searchParams.get('ref');
+    if (refCode) {
+      setReferrer(refCode);
+    }
+  }, [searchParams]);
 
   const handleSignup = async (e) => {
     e.preventDefault();

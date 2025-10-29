@@ -96,6 +96,15 @@ const TIER_DISCOUNTS = {
   diamond: 0.5,
 };
 
+// Additional discount for users referred by someone of each tier
+const REFERRER_BONUS_DISCOUNTS = {
+  unranked: 0,
+  bronze: 0.025,   // 2.5% additional discount
+  silver: 0.05,    // 5% additional discount
+  gold: 0.075,     // 7.5% additional discount
+  diamond: 0.10,   // 10% additional discount
+};
+
 const REFERRAL_SHARES = {
   unranked: 0.10,
   bronze: 0.125,
@@ -104,7 +113,16 @@ const REFERRAL_SHARES = {
   diamond: 0.25,
 };
 
+// Multi-level referral commission rates
+const MULTI_LEVEL_SHARES = {
+  level1: 'tier-based',  // Use REFERRAL_SHARES based on referrer's tier
+  level2: 0.10,          // 10% for referrer's referrer
+  level3: 0.05,          // 5% for level 3
+  level4: 0.025,         // 2.5% for level 4
+};
+
 const getTierDiscount = (tier) => TIER_DISCOUNTS[(tier || '').toLowerCase()] || 0;
+const getReferrerBonusDiscount = (tier) => REFERRER_BONUS_DISCOUNTS[(tier || '').toLowerCase()] || 0;
 const getReferralShare = (tier) => REFERRAL_SHARES[(tier || '').toLowerCase()] || REFERRAL_SHARES.unranked;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -258,49 +276,126 @@ const getJupiter = async () => {
 
 const computeFeeParts = async (amountSol, user) => {
   if (!amountSol || amountSol <= 0) {
-    return { lamports: 0, feeToApp: 0, feeToRef: 0, refUser: null };
+    return { lamports: 0, feeToApp: 0, referralChain: [] };
   }
 
   const baseLamports = Math.floor(amountSol * FEE_RATE * web3.LAMPORTS_PER_SOL);
   if (baseLamports <= 0) {
-    return { lamports: 0, feeToApp: 0, feeToRef: 0, refUser: null };
+    return { lamports: 0, feeToApp: 0, referralChain: [] };
   }
 
-  const discount = getTierDiscount(user.tier);
-  const effectiveLamports = Math.max(0, Math.floor(baseLamports * (1 - discount)));
+  // Apply user's own tier discount
+  const userDiscount = getTierDiscount(user.tier);
+  let effectiveLamports = Math.max(0, Math.floor(baseLamports * (1 - userDiscount)));
 
-  let feeToApp = effectiveLamports;
-  let feeToRef = 0;
-  let refUser = null;
-
+  // Apply referrer bonus discount if user has a referrer
+  let referrerBonusApplied = 0;
   if (user.referrer) {
-    let refId = user.referrer;
-    if (typeof refId === 'object' && refId) {
-      refId = refId._id || refId.id || (typeof refId.toString === 'function' ? refId.toString() : refId);
-    }
-
-    if (typeof refId === 'string') {
-      refId = refId.trim();
-    }
-
-    if (typeof refId === 'string' && mongoose.Types.ObjectId.isValid(refId)) {
+    const refId = normalizeReferrerId(user.referrer);
+    if (refId && mongoose.Types.ObjectId.isValid(refId)) {
       try {
-        refUser = await User.findById(refId);
+        const directReferrer = await User.findById(refId);
+        if (directReferrer) {
+          const bonusDiscount = getReferrerBonusDiscount(directReferrer.tier);
+          if (bonusDiscount > 0) {
+            const bonusAmount = Math.floor(effectiveLamports * bonusDiscount);
+            effectiveLamports = Math.max(0, effectiveLamports - bonusAmount);
+            referrerBonusApplied = bonusAmount;
+          }
+        }
       } catch (err) {
-        console.warn('[fee] failed to load referrer user', err?.message || err);
+        console.warn('[fee] failed to load referrer for bonus discount', err?.message || err);
       }
-    } else if (refId) {
-      console.warn(`[fee] skipping invalid referrer id for ${user._id}: ${refId}`);
-    }
-
-    if (refUser) {
-      const share = getReferralShare(refUser.tier);
-      feeToRef = Math.min(effectiveLamports, Math.floor(effectiveLamports * share));
-      feeToApp = effectiveLamports - feeToRef;
     }
   }
 
-  return { lamports: effectiveLamports, feeToApp, feeToRef, refUser };
+  // Calculate multi-level referral chain (up to 4 levels)
+  const referralChain = await buildReferralChain(user, 4);
+
+  // Distribute fees across referral chain
+  let totalReferralFees = 0;
+  const feeDistribution = [];
+
+  for (let i = 0; i < referralChain.length; i++) {
+    const ref = referralChain[i];
+    let feeShare = 0;
+
+    if (i === 0) {
+      // Level 1: Direct referrer gets tier-based share
+      const share = getReferralShare(ref.tier);
+      feeShare = Math.floor(effectiveLamports * share);
+    } else if (i === 1) {
+      // Level 2: 10% of fee
+      feeShare = Math.floor(effectiveLamports * MULTI_LEVEL_SHARES.level2);
+    } else if (i === 2) {
+      // Level 3: 5% of fee
+      feeShare = Math.floor(effectiveLamports * MULTI_LEVEL_SHARES.level3);
+    } else if (i === 3) {
+      // Level 4: 2.5% of fee
+      feeShare = Math.floor(effectiveLamports * MULTI_LEVEL_SHARES.level4);
+    }
+
+    if (feeShare > 0) {
+      feeDistribution.push({
+        userId: ref._id,
+        tier: ref.tier,
+        level: i + 1,
+        lamports: feeShare
+      });
+      totalReferralFees += feeShare;
+    }
+  }
+
+  // App gets remainder after all referral fees
+  const feeToApp = Math.max(0, effectiveLamports - totalReferralFees);
+
+  return {
+    lamports: effectiveLamports,
+    feeToApp,
+    referralChain: feeDistribution,
+    referrerBonusApplied
+  };
+};
+
+// Helper function to normalize referrer ID
+const normalizeReferrerId = (refId) => {
+  if (!refId) return null;
+
+  if (typeof refId === 'object' && refId) {
+    refId = refId._id || refId.id || (typeof refId.toString === 'function' ? refId.toString() : refId);
+  }
+
+  if (typeof refId === 'string') {
+    return refId.trim();
+  }
+
+  return null;
+};
+
+// Helper function to build referral chain up to maxLevels
+const buildReferralChain = async (user, maxLevels) => {
+  const chain = [];
+  let currentUser = user;
+
+  for (let level = 0; level < maxLevels; level++) {
+    if (!currentUser.referrer) break;
+
+    const refId = normalizeReferrerId(currentUser.referrer);
+    if (!refId || !mongoose.Types.ObjectId.isValid(refId)) break;
+
+    try {
+      const referrer = await User.findById(refId);
+      if (!referrer) break;
+
+      chain.push(referrer);
+      currentUser = referrer;
+    } catch (err) {
+      console.warn(`[fee] failed to load referrer at level ${level + 1}`, err?.message || err);
+      break;
+    }
+  }
+
+  return chain;
 };
 
 const collectPlatformFee = ensureInit(async ({ connection, signer, user, amountSol }) => {
@@ -310,9 +405,15 @@ const collectPlatformFee = ensureInit(async ({ connection, signer, user, amountS
   }
 
   const dryRun = String(process.env.DRY_RUN || '').toLowerCase() === 'true';
-  const { lamports, feeToApp, feeToRef, refUser } = await computeFeeParts(amountSol, user);
+  const { lamports, feeToApp, referralChain, referrerBonusApplied } = await computeFeeParts(amountSol, user);
 
-  console.log(`[fee] Volume: ${amountSol} SOL | Total fee: ${lamports / web3.LAMPORTS_PER_SOL} SOL | To App: ${feeToApp / web3.LAMPORTS_PER_SOL} SOL | To Ref: ${feeToRef / web3.LAMPORTS_PER_SOL} SOL`);
+  // Calculate total referral fees for logging
+  const totalReferralFees = referralChain.reduce((sum, ref) => sum + ref.lamports, 0);
+
+  console.log(`[fee] Volume: ${amountSol} SOL | Total fee: ${lamports / web3.LAMPORTS_PER_SOL} SOL | To App: ${feeToApp / web3.LAMPORTS_PER_SOL} SOL | To Referrals: ${totalReferralFees / web3.LAMPORTS_PER_SOL} SOL (${referralChain.length} levels)`);
+  if (referrerBonusApplied > 0) {
+    console.log(`[fee] Referrer bonus discount applied: ${referrerBonusApplied / web3.LAMPORTS_PER_SOL} SOL`);
+  }
 
   if (lamports <= 0) {
     console.log('[fee] Fee amount is 0, skipping');
@@ -325,13 +426,17 @@ const collectPlatformFee = ensureInit(async ({ connection, signer, user, amountS
 
   const instructions = [];
 
-  // Send referral fees to REWARDS_WALLET (now funded)
-  if (feeToRef > 0) {
-    console.log(`[fee] Adding referral fee: ${feeToRef / web3.LAMPORTS_PER_SOL} SOL to ${REWARDS_WALLET.toBase58()}`);
+  // Send referral fees to REWARDS_WALLET for each level
+  if (totalReferralFees > 0) {
+    console.log(`[fee] Distributing referral fees across ${referralChain.length} levels:`);
+    for (const ref of referralChain) {
+      console.log(`[fee]   Level ${ref.level} (${ref.tier}): ${ref.lamports / web3.LAMPORTS_PER_SOL} SOL`);
+    }
+
     instructions.push(web3.SystemProgram.transfer({
       fromPubkey: signer.publicKey,
       toPubkey: REWARDS_WALLET,
-      lamports: feeToRef,
+      lamports: totalReferralFees,
     }));
   }
 
@@ -373,9 +478,18 @@ const collectPlatformFee = ensureInit(async ({ connection, signer, user, amountS
 
   console.log(`[fee] Fee transaction confirmed: ${signature}`);
 
-  if (refUser && feeToRef > 0) {
-    refUser.earnedRewards = (refUser.earnedRewards || 0) + feeToRef;
-    await refUser.save();
+  // Update earned rewards for all referrers in the chain
+  for (const ref of referralChain) {
+    try {
+      const referrer = await User.findById(ref.userId);
+      if (referrer) {
+        referrer.earnedRewards = (referrer.earnedRewards || 0) + ref.lamports;
+        await referrer.save();
+        console.log(`[fee] Updated level ${ref.level} referrer ${ref.userId}: +${ref.lamports / web3.LAMPORTS_PER_SOL} SOL`);
+      }
+    } catch (err) {
+      console.warn(`[fee] Failed to update rewards for referrer ${ref.userId}:`, err?.message || err);
+    }
   }
 
   return signature;
