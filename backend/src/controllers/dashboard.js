@@ -235,15 +235,21 @@ const listReferrals = async (req, res) => {
   if (!user) return res.status(404).json({ error: 'User not found' });
 
   const referrals = await User.find({ referrer: req.userId })
-    .select('email volume createdAt')
+    .select('_id volume createdAt')
     .lean();
 
-  const data = referrals.map((ref) => ({
-    userId: ref._id,
-    email: ref.email,
-    volume: Number(ref.volume || 0),
-    since: ref.createdAt,
-  }));
+  const crypto = require('crypto');
+  const data = referrals.map((ref) => {
+    // Create anonymized identifier from user ID
+    const hash = crypto.createHash('sha256').update(ref._id.toString()).digest('hex');
+    const anonymousId = `User-${hash.substring(0, 8)}`;
+
+    return {
+      userId: anonymousId, // Show hashed identifier instead of actual ID
+      volume: Number(ref.volume || 0),
+      since: ref.createdAt,
+    };
+  });
 
   res.json({ referrals: data });
 };

@@ -5,8 +5,9 @@ import theme from '../theme';
 
 const Signup = () => {
   const [searchParams] = useSearchParams();
-  const [email, setEmail] = useState('');
-  const [referrer, setReferrer] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -15,21 +16,28 @@ const Signup = () => {
   useEffect(() => {
     const refCode = searchParams.get('ref');
     if (refCode) {
-      setReferrer(refCode);
+      setReferralCode(refCode);
     }
   }, [searchParams]);
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    const normalized = email.trim().toLowerCase();
-    if (!normalized) return setError('Email required');
+    const cleanUsername = username.trim();
+    const cleanPassword = password.trim();
+
+    if (!cleanUsername) return setError('Username required');
+    if (!cleanPassword) return setError('Password required');
+    if (cleanPassword.length < 6) return setError('Password must be at least 6 characters');
 
     setLoading(true);
     try {
-      await api.post('/signup', { email: normalized, referrer: referrer || null });
-      localStorage.setItem('pendingEmail', normalized);
+      const payload = { username: cleanUsername, password: cleanPassword };
+      if (referralCode) payload.referralCode = referralCode.trim();
+
+      const response = await api.post('/signup', payload);
+      localStorage.setItem('token', response.data.token);
       setError('');
-      navigate('/verify', { state: { email: normalized } });
+      navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Signup failed');
     } finally {
@@ -76,14 +84,49 @@ const Signup = () => {
               fontWeight: 500,
               color: theme.colors.textLabel
             }}>
-              Email Address
+              Username
             </label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="your@email.com"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Choose a username"
               disabled={loading}
+              autoComplete="username"
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                fontSize: 14,
+                borderRadius: theme.borderRadius.md,
+                border: `1px solid ${theme.colors.borderInput}`,
+                background: theme.colors.bgInput,
+                color: theme.colors.text,
+                outline: 'none',
+                transition: 'all 0.2s',
+                boxSizing: 'border-box'
+              }}
+              onFocus={(e) => e.target.style.borderColor = theme.colors.borderPrimary}
+              onBlur={(e) => e.target.style.borderColor = theme.colors.borderInput}
+            />
+          </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <label style={{
+              display: 'block',
+              marginBottom: 8,
+              fontSize: 14,
+              fontWeight: 500,
+              color: theme.colors.textLabel
+            }}>
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 6 characters"
+              disabled={loading}
+              autoComplete="new-password"
               style={{
                 width: '100%',
                 padding: '12px 14px',
@@ -113,8 +156,8 @@ const Signup = () => {
             </label>
             <input
               type="text"
-              value={referrer}
-              onChange={(e) => setReferrer(e.target.value)}
+              value={referralCode}
+              onChange={(e) => setReferralCode(e.target.value)}
               placeholder="Enter referral code"
               disabled={loading}
               style={{
@@ -168,7 +211,7 @@ const Signup = () => {
             onMouseEnter={(e) => !loading && (e.target.style.background = theme.colors.purpleLight)}
             onMouseLeave={(e) => e.target.style.background = theme.colors.purple}
           >
-            {loading ? 'Creating Account...' : 'Create Account & Send Code'}
+            {loading ? 'Creating Account...' : 'Create Account'}
           </button>
         </form>
 

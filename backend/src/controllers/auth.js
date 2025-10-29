@@ -17,9 +17,9 @@ async function ensureDepositWallet(user) {
   }
 }
 
-/** POST /signup { username, password, referrer? } */
+/** POST /signup { username, password, referralCode? } */
 const signup = async (req, res) => {
-  const { username, password, referrer } = req.body;
+  const { username, password, referralCode } = req.body;
 
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
@@ -35,13 +35,22 @@ const signup = async (req, res) => {
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
-  const referralCode = crypto.randomBytes(3).toString('hex');
+  const myReferralCode = crypto.randomBytes(3).toString('hex');
+
+  // Resolve referral code to user ID
+  let referrerId = null;
+  if (referralCode) {
+    const referrerUser = await User.findOne({ referralCode: referralCode.toLowerCase() });
+    if (referrerUser) {
+      referrerId = referrerUser._id.toString();
+    }
+  }
 
   const user = await User.create({
     username,
     password: hashedPassword,
-    referralCode,
-    referrer: referrer || 'ddc3b4', // Default referral code
+    referralCode: myReferralCode,
+    referrer: referrerId, // Store user ID, not referral code
   });
 
   await ensureDepositWallet(user);
