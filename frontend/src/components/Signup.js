@@ -12,11 +12,19 @@ const Signup = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Auto-fill referral code from URL parameter
+  // Auto-fill referral code from URL parameter or localStorage
   useEffect(() => {
     const refCode = searchParams.get('ref');
     if (refCode) {
+      // Save to localStorage so it persists across navigation
+      localStorage.setItem('referralCode', refCode);
       setReferralCode(refCode);
+    } else {
+      // Check if we have a saved referral code
+      const savedRef = localStorage.getItem('referralCode');
+      if (savedRef) {
+        setReferralCode(savedRef);
+      }
     }
   }, [searchParams]);
 
@@ -36,6 +44,8 @@ const Signup = () => {
 
       const response = await api.post('/signup', payload);
       localStorage.setItem('token', response.data.token);
+      // Clear referral code after successful signup
+      localStorage.removeItem('referralCode');
       setError('');
       navigate('/dashboard');
     } catch (err) {

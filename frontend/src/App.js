@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/Login';
+import Signup from './components/Signup';
 import Dashboard from './components/Dashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 import Header from './components/Header';
@@ -45,6 +46,7 @@ const App = () => {
 
           <Routes>
             <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login setUsername={setUser} />} />
+            <Route path="/signup" element={user ? <Navigate to="/dashboard" /> : <Signup />} />
             <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
             <Route path="*" element={<Navigate to="/login" />} />
           </Routes>

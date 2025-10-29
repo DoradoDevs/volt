@@ -187,7 +187,7 @@ const Referral = ({ code, rewards, onRewardsUpdate }) => {
                     borderTop: '1px solid rgba(123,104,238,0.35)'
                   }}
                 >
-                  <div>{ref.email}</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: 12 }}>{ref.userId}</div>
                   <div>{Number(ref.volume || 0).toFixed(2)}</div>
                   <div>{ref.since ? new Date(ref.since).toLocaleDateString() : '—'}</div>
                 </div>
